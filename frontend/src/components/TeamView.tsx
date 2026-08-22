@@ -19,6 +19,7 @@ import { PageHeader, PageWrap } from "@/components/PageWrap";
 import { StatusPill } from "@/components/PendingChip";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { wahaHealth } from "@/lib/waha-status";
 
 interface TeamViewProps {
   isAdmin?: boolean;
@@ -29,14 +30,6 @@ const fieldLabel = "text-[11px] font-medium uppercase tracking-wide text-muted-f
 
 function isRootAdmin(username: string) {
   return username.toLowerCase().trim() === "admin";
-}
-
-function sessionTone(status?: string) {
-  const value = (status || "").toUpperCase();
-  if (value === "CONNECTED" || value === "ONLINE" || value === "WORKING") return "success" as const;
-  if (value === "SCAN_QR_CODE" || value === "STARTING") return "warning" as const;
-  if (value === "FAILED") return "danger" as const;
-  return "muted" as const;
 }
 
 export function TeamView({ isAdmin, onOpenSessions }: TeamViewProps) {
@@ -239,7 +232,7 @@ export function TeamView({ isAdmin, onOpenSessions }: TeamViewProps) {
                           {user.assigned_session ? (
                             <StatusPill
                               label={user.assigned_session}
-                              tone={sessionTone(session?.status)}
+                              tone={wahaHealth(session?.status).tone}
                             />
                           ) : (
                             <StatusPill label="No session" tone="warning" />

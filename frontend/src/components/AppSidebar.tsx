@@ -38,6 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { NAV_SPRING } from "@/lib/motion";
 import { StatusPill } from "@/components/PendingChip";
+import type { WahaHealth } from "@/lib/waha-status";
 
 export type NavKey =
   | "inbox"
@@ -59,7 +60,7 @@ export interface AppSidebarProps {
   onLogout: () => void;
   user?: { username: string };
   isAdmin?: boolean;
-  isConnected?: boolean;
+  connection?: WahaHealth;
   userLoading?: boolean;
 }
 
@@ -78,7 +79,7 @@ export function AppSidebar({
   onLogout,
   user,
   isAdmin,
-  isConnected,
+  connection,
   userLoading,
 }: AppSidebarProps) {
   const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
@@ -198,8 +199,8 @@ export function AppSidebar({
         {!collapsed && (
           <div className="mb-1.5">
             <StatusPill
-              label={isConnected ? "Live" : "Connecting"}
-              tone={isConnected ? "success" : "warning"}
+              label={connection?.label ?? "Connecting"}
+              tone={connection?.tone ?? "warning"}
             />
           </div>
         )}

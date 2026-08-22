@@ -32,6 +32,7 @@ import { PageHeader, PageWrap } from "@/components/PageWrap";
 import { StatusPill } from "@/components/PendingChip";
 import { beginThemeTransition } from "@/lib/theme";
 import { DEFAULT_PREFERENCES, useAppSettings } from "@/hooks/use-app-settings";
+import { wahaHealth } from "@/lib/waha-status";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -75,18 +76,6 @@ function chipClass(active: boolean) {
       ? "border-primary/30 bg-primary/10 text-primary"
       : "border-border bg-card text-muted-foreground hover:bg-muted/40",
   );
-}
-
-function sessionStatus(status?: string) {
-  const value = (status || "").toUpperCase();
-  if (value === "CONNECTED" || value === "ONLINE" || value === "WORKING") {
-    return { label: "Connected", tone: "success" as const };
-  }
-  if (value === "SCAN_QR_CODE" || value === "STARTING") {
-    return { label: status || "Starting", tone: "warning" as const };
-  }
-  if (value === "FAILED") return { label: "Failed", tone: "danger" as const };
-  return { label: status || "Offline", tone: "muted" as const };
 }
 
 export function SettingsView({
@@ -133,7 +122,7 @@ export function SettingsView({
   });
 
   const activeSession = (wahaStatus?.sessions ?? []).find((s) => s.name === defaultSession);
-  const connection = sessionStatus(activeSession?.status);
+  const connection = wahaHealth(activeSession?.status);
   const timezone = useMemo(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || "Local";

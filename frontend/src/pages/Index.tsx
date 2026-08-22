@@ -24,6 +24,7 @@ import { TeamView } from "@/components/TeamView";
 import { PageHeader, PageWrap } from "@/components/PageWrap";
 import { tabSwap } from "@/lib/motion";
 import { toast } from "sonner";
+import { wahaHealth } from "@/lib/waha-status";
 
 const OPEN_HELPBOT_EVENT = "buildesk:open-helpbot";
 
@@ -82,13 +83,11 @@ const Index = () => {
     refetchInterval: 5000,
   });
 
-  const defaultSession = (wahaStatus as { defaultSession?: string } | undefined)?.defaultSession ?? "default";
-  const sessionsList = (wahaStatus as { sessions?: { name: string; status?: string }[] } | undefined)?.sessions ?? [];
-  const isConnected = (() => {
-    const session = sessionsList.find((s: { name: string }) => s.name === defaultSession);
-    const status = session?.status?.toUpperCase();
-    return status === "CONNECTED" || status === "ONLINE";
-  })();
+  const defaultSession = wahaStatus?.defaultSession ?? "default";
+  const sessionsList = wahaStatus?.sessions ?? [];
+  const connection = wahaStatus
+    ? wahaHealth(sessionsList.find((s) => s.name === defaultSession)?.status)
+    : { live: false, label: "Connecting", tone: "warning" as const };
 
   const handleLogout = async () => {
     try {
@@ -138,7 +137,7 @@ const Index = () => {
           onLogout={handleLogout}
           user={currentUser?.user}
           isAdmin={isAdmin}
-          isConnected={isConnected}
+          connection={connection}
           userLoading={userLoading}
         />
 

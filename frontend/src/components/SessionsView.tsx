@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { isWahaLive, normalizeWahaStatus } from "@/lib/waha-status";
 
 interface SessionsViewProps {
   isOpen: boolean;
@@ -120,8 +121,8 @@ export function SessionsView({ isOpen, onClose, defaultSessionName }: SessionsVi
   });
 
   const statusColor = (status?: string) => {
-    const s = (status || "").toUpperCase();
-    if (s === "CONNECTED" || s === "ONLINE") return "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+    const s = normalizeWahaStatus(status);
+    if (isWahaLive(s)) return "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
     if (s === "SCAN_QR_CODE" || s === "STARTING") return "bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30";
     if (s === "STOPPED" || s === "FAILED") return "bg-muted text-muted-foreground border-border";
     return "bg-muted/80 text-muted-foreground border-border";
@@ -213,7 +214,7 @@ export function SessionsView({ isOpen, onClose, defaultSessionName }: SessionsVi
                       Start
                     </Button>
                   )}
-                  {(s.status === "CONNECTED" || s.status === "ONLINE" || s.status === "SCAN_QR_CODE" || s.status === "STARTING") && (
+                  {(isWahaLive(s.status) || s.status === "SCAN_QR_CODE" || s.status === "STARTING") && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -225,7 +226,7 @@ export function SessionsView({ isOpen, onClose, defaultSessionName }: SessionsVi
                       Stop
                     </Button>
                   )}
-                  {(s.status === "CONNECTED" || s.status === "ONLINE") && (
+                  {isWahaLive(s.status) && (
                     <Button
                       size="sm"
                       variant="outline"
