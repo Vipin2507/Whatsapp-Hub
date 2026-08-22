@@ -1,38 +1,24 @@
 import { Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { beginThemeTransition } from "@/lib/theme";
 
-export function ThemeToggle() {
-  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-    localStorage.setItem("theme", theme);
-  }, [theme]);
+export function ThemeToggle({ className }: { className?: string }) {
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
 
   return (
     <Button
       variant="ghost"
       size="icon"
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      // UPDATED className:
-      // 1. Added default light mode styles: bg-white, border-slate-200, hover:bg-slate-100
-      // 2. Prefixed your existing dark styles with 'dark:': dark:bg-slate-800/50, etc.
-      className="rounded-full w-9 h-9 transition-all duration-500 bg-white border border-slate-200 hover:bg-slate-100 dark:bg-slate-800/50 dark:border-slate-700 dark:hover:bg-indigo-500/20"
+      className={className}
+      onClick={() => {
+        beginThemeTransition();
+        setTheme(isDark ? "light" : "dark");
+      }}
+      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
     >
-      {theme === "dark" ? (
-       
-        <Sun className="h-4 w-4 text-amber-400 rotate-0 scale-100 transition-all" />
-      ) : (
-    
-        <Moon className="h-4 w-4 text-slate-900 rotate-0 scale-100 transition-all" />
-      )}
-      <span className="sr-only">Toggle theme</span>
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </Button>
   );
 }

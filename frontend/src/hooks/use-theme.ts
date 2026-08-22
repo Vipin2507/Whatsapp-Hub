@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useTheme as useNextTheme } from "next-themes";
+import { useCallback } from "react";
+import { beginThemeTransition } from "@/lib/theme";
 
-export function useTheme() {
-  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "dark");
+export function useAppTheme() {
+  const { resolvedTheme, setTheme } = useNextTheme();
 
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(theme);
-    localStorage.setItem("theme", theme);
-  }, [theme]);
+  const toggleTheme = useCallback(() => {
+    beginThemeTransition();
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  }, [resolvedTheme, setTheme]);
 
-  return { theme, setTheme };
+  return { theme: resolvedTheme ?? "light", setTheme, toggleTheme };
 }
+
+export const useTheme = useAppTheme;

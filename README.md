@@ -73,7 +73,19 @@ Styling/UI:
 cd /root/buildesk
 docker compose up --build
 ```
-Frontend: http://localhost (or mapped host), Backend API: http://localhost:5000 (through Nginx proxy). WAHA at http://localhost:3000, n8n at http://localhost:5678 (basic auth).
+Frontend: http://localhost:8080, Backend API through Nginx `/api`. WAHA at http://localhost:3000, n8n at http://localhost:5678 (basic auth).
+
+### Auto-deploy on GitHub push
+Pushes to `main` sync the repo to the VPS and rebuild the app containers (`buildesk-frontend`, `buildesk-backend`). SQLite in `backend/instance/` is never overwritten.
+
+1. On the VPS, once: `bash scripts/vps-bootstrap.sh /root/buildesk`
+2. Create an SSH key used only for deploy. Add the **public** key to `/root/.ssh/authorized_keys` on the VPS.
+3. In GitHub → **Settings → Secrets and variables → Actions**, add:
+   - `VPS_HOST` — server IP or hostname
+   - `VPS_USER` — SSH user (`root` if that is how you log in)
+   - `VPS_SSH_KEY` — the **private** key (full PEM, including `BEGIN`/`END` lines)
+   - Optional: `VPS_PORT` (default `22`), `DEPLOY_PATH` (default `/root/buildesk`)
+4. Push to `main`, or run **Actions → Deploy to VPS → Run workflow**.
 
 ### Backend only (local)
 ```bash

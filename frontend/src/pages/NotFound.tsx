@@ -1,6 +1,6 @@
 import { useLocation, Link } from "react-router-dom";
 import { useEffect } from "react";
-import { Home, MessageCircle } from "lucide-react";
+import { Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const NotFound = () => {
@@ -12,15 +12,14 @@ const NotFound = () => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="text-center max-w-md">
-        <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 border border-primary/20">
-          <MessageCircle className="w-8 h-8 text-primary" />
-        </div>
-        <h1 className="text-6xl font-bold text-foreground mb-2">404</h1>
-        <p className="text-lg text-muted-foreground mb-6">This page doesn't exist or was moved.</p>
-        <Link to="/">
-          <Button className="gap-2 rounded-xl">
-            <Home className="w-4 h-4" /> Back to dashboard
+      <div className="text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Not found</p>
+        <h1 className="mt-1 text-lg font-semibold tracking-tight">This page doesn’t exist</h1>
+        <p className="mt-1 text-xs text-muted-foreground">{location.pathname}</p>
+        <Link to="/" className="mt-4 inline-block">
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <Home className="h-3.5 w-3.5" />
+            Back to workspace
           </Button>
         </Link>
       </div>

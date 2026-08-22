@@ -1,36 +1,32 @@
+import { LayoutGroup, motion } from "framer-motion";
+import {
+  Building2,
+  Calendar,
+  ClipboardList,
+  LayoutTemplate,
+  LifeBuoy,
+  LogOut,
+  MessageSquare,
+  Mic,
+  PanelLeft,
+  Rocket,
+  Settings,
+  Shield,
+  Smartphone,
+  Bot,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Database,
-  Layers,
-  LayoutTemplate,
-  Calendar,
-  Settings,
-  HelpCircle,
-  MessageCircleQuestion,
-  ChevronUp,
-  MessageSquare,
-  LogOut,
-  Shield,
-  Loader2,
-  Mic,
-  Bot,
-  Smartphone,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -38,265 +34,175 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
+import { NAV_SPRING } from "@/lib/motion";
+import { StatusPill } from "@/components/PendingChip";
+
+export type NavKey =
+  | "inbox"
+  | "analytics"
+  | "contacts"
+  | "lists"
+  | "templates"
+  | "scheduler"
+  | "sessions"
+  | "conversations"
+  | "calls"
+  | "settings"
+  | "help";
 
 export interface AppSidebarProps {
-  onOpenRegistry: () => void;
-  onOpenSegments: () => void;
-  onOpenTemplates: () => void;
-  onOpenScheduler: () => void;
-  onOpenCallAnalysis?: () => void;
-  onOpenConversations?: () => void;
-  onOpenSessions?: () => void;
-  onOpenOperators?: () => void;
+  active: NavKey;
+  onNavigate: (key: NavKey) => void;
   onLogout: () => void;
-  onOpenHelp?: () => void;
+  onOpenOperators?: () => void;
   user?: { username: string };
   isAdmin?: boolean;
   isConnected?: boolean;
   userLoading?: boolean;
 }
 
+const PRIMARY: { key: NavKey; label: string; icon: typeof Building2 }[] = [
+  { key: "inbox", label: "Inbox", icon: MessageSquare },
+  { key: "analytics", label: "Analytics", icon: Rocket },
+  { key: "contacts", label: "Contacts", icon: Building2 },
+  { key: "lists", label: "Lists", icon: ClipboardList },
+  { key: "templates", label: "Templates", icon: LayoutTemplate },
+  { key: "scheduler", label: "Scheduler", icon: Calendar },
+];
+
 export function AppSidebar({
-  onOpenRegistry,
-  onOpenSegments,
-  onOpenTemplates,
-  onOpenScheduler,
-  onOpenCallAnalysis,
-  onOpenConversations,
-  onOpenSessions,
-  onOpenOperators,
+  active,
+  onNavigate,
   onLogout,
-  onOpenHelp,
+  onOpenOperators,
   user,
   isAdmin,
   isConnected,
   userLoading,
 }: AppSidebarProps) {
-  const { state } = useSidebar();
-  const isCollapsed = state === "collapsed";
+  const { state, toggleSidebar } = useSidebar();
+  const collapsed = state === "collapsed";
+
+  const secondary: { key: NavKey; label: string; icon: typeof Building2; show?: boolean }[] = [
+    { key: "sessions", label: "Sessions", icon: Smartphone, show: isAdmin },
+    { key: "conversations", label: "Conversations", icon: Bot, show: true },
+    { key: "calls", label: "Call analysis", icon: Mic, show: true },
+    { key: "settings", label: "Settings", icon: Settings, show: true },
+    { key: "help", label: "Help", icon: LifeBuoy, show: true },
+  ];
 
   return (
     <Sidebar collapsible="icon" side="left" className="border-r border-sidebar-border">
-      <SidebarHeader className="flex flex-row items-center justify-between gap-2 border-b border-sidebar-border/50 p-3">
-        <div className="flex items-center gap-2 overflow-hidden">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md">
-            <MessageSquare className="h-5 w-5" />
-          </div>
-          {!isCollapsed && (
-            <div className="min-w-0">
-              <span className="truncate font-bold text-sidebar-foreground">Buildesk</span>
-              <p className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
-                CRM
-              </p>
+      <SidebarHeader
+        className={cn(
+          "h-14",
+          collapsed
+            ? "flex items-center justify-center p-0"
+            : "flex flex-row items-center gap-2 border-b border-sidebar-border px-2.5",
+        )}
+      >
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <MessageSquare className="h-4 w-4" />
+        </button>
+        {!collapsed && (
+          <>
+            <div className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-semibold tracking-tight text-sidebar-foreground">
+                Buildesk
+              </span>
+              <span className="block text-[10px] font-medium uppercase tracking-wide text-sidebar-foreground/50">
+                Operations
+              </span>
             </div>
-          )}
-        </div>
-        <SidebarTrigger className="shrink-0" />
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              aria-label="Collapse sidebar"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+          </>
+        )}
       </SidebarHeader>
 
       <SidebarContent className="gap-0">
-        <SidebarGroup>
-          <SidebarGroupLabel className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/80">
-            <ChevronUp className="h-3.5 w-3.5" />
-            {!isCollapsed && "Navigate"}
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={onOpenRegistry}
-                  tooltip="Contacts"
-                  className="cursor-pointer"
-                >
-                  <Database className="h-4 w-4 shrink-0" />
-                  <span>Contacts</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={onOpenSegments}
-                  tooltip="Lists"
-                  className="cursor-pointer"
-                >
-                  <Layers className="h-4 w-4 shrink-0" />
-                  <span>Lists</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={onOpenTemplates}
-                  tooltip="Templates"
-                  className="cursor-pointer"
-                >
-                  <LayoutTemplate className="h-4 w-4 shrink-0" />
-                  <span>Templates</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={onOpenScheduler}
-                  tooltip="Scheduler"
-                  className="cursor-pointer"
-                >
-                  <Calendar className="h-4 w-4 shrink-0" />
-                  <span>Scheduler</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              {onOpenSessions && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={onOpenSessions}
-                    tooltip="WhatsApp Sessions"
-                    className="cursor-pointer"
-                  >
-                    <Smartphone className="h-4 w-4 shrink-0" />
-                    <span>Sessions</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-              {onOpenConversations && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={onOpenConversations}
-                    tooltip="Conversations"
-                    className="cursor-pointer"
-                  >
-                    <Bot className="h-4 w-4 shrink-0" />
-                    <span>Conversations</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-              {onOpenCallAnalysis && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={onOpenCallAnalysis}
-                    tooltip="Call Analysis"
-                    className="cursor-pointer"
-                  >
-                    <Mic className="h-4 w-4 shrink-0" />
-                    <span>Call Analysis</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <LayoutGroup id="sidebar-nav">
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {PRIMARY.map((item) => (
+                  <NavButton
+                    key={item.key}
+                    item={item}
+                    active={active === item.key}
+                    collapsed={collapsed}
+                    onClick={() => onNavigate(item.key)}
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
-        <SidebarSeparator />
+          <SidebarSeparator />
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/80">
-            <ChevronUp className="h-3.5 w-3.5" />
-            {!isCollapsed && "More"}
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  tooltip="Settings"
-                  className="cursor-pointer"
-                >
-                  <button className="w-full">
-                    <Settings className="h-4 w-4 shrink-0" />
-                    <span>Settings</span>
-                  </button>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Night Mode">
-                  <div className="flex w-full items-center gap-2">
-                    <ThemeToggle />
-                    <span className="group-data-[collapsible=icon]:hidden">Night Mode</span>
-                  </div>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={onOpenHelp}
-                  tooltip="Help Center"
-                  className="cursor-pointer"
-                >
-                  <HelpCircle className="h-4 w-4 shrink-0" />
-                  <span>Help Center</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  tooltip="Support"
-                  className="cursor-pointer"
-                >
-                  <a href="#" className="w-full" onClick={(e) => e.preventDefault()}>
-                    <MessageCircleQuestion className="h-4 w-4 shrink-0" />
-                    <span>Support</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {secondary
+                  .filter((item) => item.show !== false)
+                  .map((item) => (
+                    <NavButton
+                      key={item.key}
+                      item={item}
+                      active={active === item.key}
+                      collapsed={collapsed}
+                      onClick={() => onNavigate(item.key)}
+                    />
+                  ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </LayoutGroup>
       </SidebarContent>
 
-      <SidebarFooter className="mt-auto border-t border-sidebar-border/50 p-2">
-        {/* WAHA status */}
-        {!isCollapsed && (
-          <div
-            className={cn(
-              "mb-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium",
-              isConnected
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-            )}
-          >
-            <div
-              className={cn(
-                "h-2 w-2 rounded-full",
-                isConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500 animate-pulse"
-              )}
+      <SidebarFooter className={cn("border-t border-sidebar-border", collapsed ? "items-center p-1.5" : "p-2")}>
+        {!collapsed && (
+          <div className="mb-1.5">
+            <StatusPill
+              label={isConnected ? "Live" : "Connecting"}
+              tone={isConnected ? "success" : "warning"}
             />
-            <span className="truncate">
-              {isConnected ? "WhatsApp connected" : "Connecting…"}
-            </span>
           </div>
         )}
-
-        {/* User profile */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
+            <button
+              type="button"
               className={cn(
-                "h-auto w-full justify-start gap-3 rounded-lg p-2 hover:bg-sidebar-accent",
-                isCollapsed && "justify-center p-2"
+                "flex w-full cursor-pointer items-center gap-2 rounded-md hover:bg-sidebar-accent",
+                collapsed ? "h-9 w-9 justify-center p-0" : "px-1.5 py-1.5",
               )}
             >
-              <Avatar className="h-9 w-9 shrink-0 rounded-full border-2 border-sidebar-border">
-                <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
-                  {userLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    (user?.username ?? "?")
-                      .slice(0, 2)
-                      .toUpperCase()
-                  )}
+              <Avatar className="h-7 w-7 shrink-0">
+                <AvatarFallback className="bg-sidebar-primary/20 text-[10px] font-semibold text-sidebar-foreground">
+                  {userLoading ? "…" : (user?.username ?? "?").slice(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              {!isCollapsed && (
-                <div className="flex min-w-0 flex-1 flex-col items-start text-left">
-                  <span className="truncate text-sm font-semibold text-sidebar-foreground">
-                    {userLoading ? "…" : user?.username ?? "User"}
-                  </span>
-                  <span className="truncate text-[10px] text-sidebar-foreground/70">
-                    {user?.username ? `${user.username}@buildesk` : "—"}
-                  </span>
-                </div>
+              {!collapsed && (
+                <span className="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-sidebar-foreground">
+                  {userLoading ? "…" : user?.username ?? "User"}
+                </span>
               )}
-            </Button>
+            </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="right" className="w-56">
+          <DropdownMenuContent align="start" side="right" className="w-48">
             {isAdmin && onOpenOperators && (
               <DropdownMenuItem onClick={onOpenOperators}>
                 <Shield className="mr-2 h-4 w-4" />
@@ -311,5 +217,46 @@ export function AppSidebar({
         </DropdownMenu>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function NavButton({
+  item,
+  active,
+  collapsed,
+  onClick,
+}: {
+  item: { key: string; label: string; icon: typeof Building2 };
+  active: boolean;
+  collapsed: boolean;
+  onClick: () => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <SidebarMenuItem>
+      <button
+        type="button"
+        onClick={onClick}
+        title={collapsed ? item.label : undefined}
+        className={cn(
+          "relative flex cursor-pointer items-center rounded-md text-[13px] font-medium",
+          collapsed ? "mx-auto h-9 w-9 justify-center" : "w-full gap-2 px-2.5 py-1.5",
+          active ? "text-white" : "text-sidebar-foreground/75 hover:text-sidebar-foreground",
+        )}
+      >
+        {active && (
+          <motion.span
+            layoutId="sidebar-active"
+            className="absolute inset-0 rounded-md bg-sidebar-accent"
+            transition={NAV_SPRING}
+          />
+        )}
+        {active && !collapsed && (
+          <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-sidebar-primary" />
+        )}
+        <Icon className="relative z-10 h-4 w-4 shrink-0" />
+        {!collapsed && <span className="relative z-10 truncate">{item.label}</span>}
+      </button>
+    </SidebarMenuItem>
   );
 }

@@ -1,0 +1,85 @@
+# Deploy Whatsapp Hub to the VPS on every push to main.
+#
+# GitHub → Settings → Secrets and variables → Actions:
+#   VPS_HOST      VPS IP or hostname
+#   VPS_USER      SSH user (usually root)
+#   VPS_SSH_KEY   Private key whose public half is in ~/.ssh/authorized_keys on the VPS
+# Optional:
+#   VPS_PORT      SSH port (default 22)
+#   DEPLOY_PATH   App directory on the VPS (default /root/buildesk)
+#
+# First-time on the VPS: run scripts/vps-bootstrap.sh then add the deploy public key.
+
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vps-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve target
+        id: target
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          echo "path=${DEPLOY_PATH:-/root/buildesk}" >> "$GITHUB_OUTPUT"
+          echo "port=${VPS_PORT:-22}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure app directory exists
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ steps.target.outputs.port }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            mkdir -p "${{ steps.target.outputs.path }}/backend/instance"
+
+      - name: Sync files to VPS
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az
+            --delete
+            --exclude .git
+            --exclude .github
+            --exclude backend/instance
+            --exclude node_modules
+            --exclude frontend/node_modules
+            --exclude frontend/dist
+            --exclude .env
+          path: ./
+          remote_path: ${{ steps.target.outputs.path }}/
+          remote_host: ${{ secrets.VPS_HOST }}
+          remote_user: ${{ secrets.VPS_USER }}
+          remote_port: ${{ steps.target.outputs.port }}
+          remote_key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Build and restart on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ steps.target.outputs.port }}
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            cd "${{ steps.target.outputs.path }}"
+            chmod +x scripts/deploy.sh scripts/vps-bootstrap.sh
+            ./scripts/deploy.sh

@@ -34,7 +34,7 @@ const getStageColor = (stage: string) => {
   switch (stage?.toLowerCase()) {
     case 'hot': return "bg-orange-500/20 text-orange-500 border-orange-500/30";
     case 'closed': return "bg-emerald/20 text-emerald border-emerald/30";
-    case 'follow-up': return "bg-indigo/20 text-indigo border-indigo/30";
+    case 'follow-up': return "bg-warning/15 text-warning-foreground border-warning/30";
     case 'cold': return "bg-muted text-muted-foreground border-border";
     default: return "bg-primary/10 text-primary border-primary/20";
   }

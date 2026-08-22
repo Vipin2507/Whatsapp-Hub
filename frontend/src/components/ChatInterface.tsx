@@ -296,7 +296,7 @@ export function ChatInterface({
           <Button variant="ghost" size="sm" onClick={onOpenTemplates} className="h-7 text-xs rounded-lg gap-1.5 text-muted-foreground hover:text-primary">
             <LayoutTemplate className="w-3.5 h-3.5" /> Library
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => aiAssistMutation.mutate()} disabled={aiAssistMutation.isPending || messages.length === 0} className="h-7 text-xs rounded-lg gap-1.5 text-muted-foreground hover:text-purple-500">
+          <Button variant="ghost" size="sm" onClick={() => aiAssistMutation.mutate()} disabled={aiAssistMutation.isPending || messages.length === 0} className="h-7 text-xs rounded-lg gap-1.5 text-muted-foreground hover:text-primary">
             {aiAssistMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} AI Assist
           </Button>
         </div>
