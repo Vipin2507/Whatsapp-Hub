@@ -22,6 +22,7 @@ import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { extractRawPhoneFromRow, normalizeContactPhone } from "@/lib/phone";
+import { useAppPreferences } from "@/hooks/use-app-settings";
 
 interface ListEditorModalProps {
   isOpen: boolean;
@@ -33,6 +34,7 @@ const LEAD_STAGES = ["New", "Follow-up", "Hot", "Cold", "Closed"];
 
 export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModalProps) {
   const queryClient = useQueryClient();
+  const prefs = useAppPreferences();
   const [memberSearch, setMemberSearch] = useState("");
   const [globalSearch, setGlobalSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("All");
@@ -96,7 +98,7 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
   const sanitizeBulkData = (data: any[]) => {
     return data.map(row => {
       const rawPhone = extractRawPhoneFromRow(row as Record<string, unknown>);
-      const cleaned = normalizeContactPhone(rawPhone);
+      const cleaned = normalizeContactPhone(rawPhone, prefs.default_country_code);
       return {
         ...row,
         phone: cleaned,

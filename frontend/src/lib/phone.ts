@@ -85,7 +85,7 @@ export function extractRawPhoneFromRow(row: Record<string, unknown>): string {
  * - Exactly 10 digits without an international prefix default to India (91), matching existing behaviour.
  * - Longer digit-only strings are kept as-is (already include a country calling code).
  */
-export function normalizeContactPhone(raw: unknown): string {
+export function normalizeContactPhone(raw: unknown, defaultCountryCode = "91"): string {
   const s =
     typeof raw === "number" || typeof raw === "bigint"
       ? stringifyPhoneCellValue(raw)
@@ -113,7 +113,8 @@ export function normalizeContactPhone(raw: unknown): string {
   }
 
   if (capped.length === 10) {
-    return `91${capped}`;
+    const cc = String(defaultCountryCode || "91").replace(/\D/g, "") || "91";
+    return `${cc}${capped}`;
   }
 
   return capped;

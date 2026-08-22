@@ -24,6 +24,7 @@ import { Input } from "./ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { normalizeContactPhone } from "@/lib/phone";
+import { useAppPreferences } from "@/hooks/use-app-settings";
 import {
   Select,
   SelectContent,
@@ -60,6 +61,7 @@ const fieldLabel = "text-[11px] font-medium uppercase tracking-wide text-muted-f
 
 export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProps) {
   const queryClient = useQueryClient();
+  const prefs = useAppPreferences();
 
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("All");
@@ -273,7 +275,7 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
                 autoComplete="tel"
                 value={newPhone}
                 onChange={(e) => setNewPhone(e.target.value)}
-                placeholder="+234… or 10-digit India"
+                placeholder={`+${prefs.default_country_code}… or 10-digit local`}
                 className="h-9"
               />
             </div>
@@ -307,7 +309,7 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
 
             <Button
               onClick={() => {
-                const phone = normalizeContactPhone(newPhone);
+                const phone = normalizeContactPhone(newPhone, prefs.default_country_code);
                 if (!newName?.trim()) return toast.error("Name is required");
                 if (!phone) return toast.error("Enter a valid phone number");
                 upsertMutation.mutate({

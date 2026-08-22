@@ -464,6 +464,108 @@ def toggle_ai():
         "status": "success", 
         "ai_enabled": current_user.ai_auto_reply
     })
+
+
+PREFS_DEFAULTS = {
+    "default_country_code": "91",
+    "notify_pending_schedules": True,
+    "enter_to_send": True,
+}
+
+
+def _user_prefs_key(user_id):
+    return f"user_prefs_{user_id}"
+
+
+def get_user_prefs(user_id):
+    _ensure_settings_table()
+    row = Setting.query.filter_by(key=_user_prefs_key(user_id)).first()
+    prefs = dict(PREFS_DEFAULTS)
+    if row and row.value:
+        try:
+            stored = json.loads(row.value)
+            if isinstance(stored, dict):
+                for key, default in PREFS_DEFAULTS.items():
+                    if key not in stored:
+                        continue
+                    value = stored[key]
+                    if isinstance(default, bool):
+                        prefs[key] = bool(value)
+                    elif isinstance(default, str):
+                        prefs[key] = str(value).strip() or default
+                    else:
+                        prefs[key] = value
+        except (TypeError, ValueError):
+            pass
+    digits = "".join(ch for ch in str(prefs.get("default_country_code") or "") if ch.isdigit())[:4]
+    prefs["default_country_code"] = digits or PREFS_DEFAULTS["default_country_code"]
+    return prefs
+
+
+@app.route('/api/auth/password', methods=['PUT'])
+@login_required
+def change_password():
+    data = request.json or {}
+    current_pw = data.get("current_password") or ""
+    new_pw = data.get("new_password") or ""
+    if len(new_pw) < 6:
+        return jsonify({"status": "error", "message": "New password must be at least 6 characters"}), 400
+    if not bcrypt.check_password_hash(current_user.password, current_pw):
+        return jsonify({"status": "error", "message": "Current password is incorrect"}), 400
+    current_user.password = bcrypt.generate_password_hash(new_pw).decode("utf-8")
+    db.session.commit()
+    return jsonify({"status": "success"})
+
+
+@app.route('/api/settings', methods=['GET'])
+@login_required
+def get_app_settings():
+    return jsonify({
+        "user": {
+            "id": current_user.id,
+            "username": current_user.username,
+            "ai_enabled": bool(current_user.ai_auto_reply),
+            "is_admin": current_user.username.lower().strip() == "admin",
+        },
+        "whatsapp": {
+            "default_session": get_waha_default_session(current_user.id),
+        },
+        "preferences": get_user_prefs(current_user.id),
+    })
+
+
+@app.route('/api/settings/preferences', methods=['PUT'])
+@login_required
+def update_preferences():
+    data = request.json or {}
+    prefs = get_user_prefs(current_user.id)
+    if "default_country_code" in data:
+        digits = "".join(ch for ch in str(data.get("default_country_code") or "") if ch.isdigit())[:4]
+        if digits:
+            prefs["default_country_code"] = digits
+    if "notify_pending_schedules" in data:
+        prefs["notify_pending_schedules"] = bool(data.get("notify_pending_schedules"))
+    if "enter_to_send" in data:
+        prefs["enter_to_send"] = bool(data.get("enter_to_send"))
+    _ensure_settings_table()
+    key = _user_prefs_key(current_user.id)
+    payload = json.dumps(prefs)
+    row = Setting.query.filter_by(key=key).first()
+    if row:
+        row.value = payload
+    else:
+        db.session.add(Setting(key=key, value=payload))
+    db.session.commit()
+    return jsonify({"preferences": prefs})
+
+
+@app.route('/api/settings/auto-reply', methods=['PUT'])
+@login_required
+def set_auto_reply():
+    data = request.json or {}
+    current_user.ai_auto_reply = bool(data.get("enabled"))
+    db.session.commit()
+    return jsonify({"status": "success", "ai_enabled": current_user.ai_auto_reply})
     
 @app.route('/api/sentry/status', methods=['GET'])
 def sentry_status():

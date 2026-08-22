@@ -89,6 +89,25 @@ export interface User {
   username: string;
 }
 
+export interface AppPreferences {
+  default_country_code: string;
+  notify_pending_schedules: boolean;
+  enter_to_send: boolean;
+}
+
+export interface AppSettings {
+  user: {
+    id: number;
+    username: string;
+    ai_enabled: boolean;
+    is_admin: boolean;
+  };
+  whatsapp: {
+    default_session: string;
+  };
+  preferences: AppPreferences;
+}
+
 export interface AdminUser extends User {
   assigned_session?: string;
 }
@@ -210,6 +229,25 @@ export const api = {
     login: (credentials: any) => request("/auth/login", { method: "POST", body: JSON.stringify(credentials) }),
     logout: () => request("/auth/logout", { method: "POST" }),
     getMe: () => request("/auth/me"),
+    changePassword: (current_password: string, new_password: string) =>
+      request("/auth/password", {
+        method: "PUT",
+        body: JSON.stringify({ current_password, new_password }),
+      }),
+  },
+
+  settings: {
+    get: (): Promise<AppSettings> => request("/settings") as Promise<AppSettings>,
+    updatePreferences: (data: Partial<AppPreferences>): Promise<{ preferences: AppPreferences }> =>
+      request("/settings/preferences", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }) as Promise<{ preferences: AppPreferences }>,
+    setAutoReply: (enabled: boolean): Promise<{ ai_enabled: boolean }> =>
+      request("/settings/auto-reply", {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      }) as Promise<{ ai_enabled: boolean }>,
   },
 
   dashboard: {
@@ -370,6 +408,7 @@ export const api = {
         body: JSON.stringify(data)
       }),
     delete: (id: number) => request(`/schedule/${id}`, { method: "DELETE" }),
+    retry: (id: number) => request(`/schedule/retry/${id}`, { method: "POST" }),
   },
 
   helpbot: {

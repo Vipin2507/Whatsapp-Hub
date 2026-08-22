@@ -7,11 +7,9 @@ import { SidebarProvider, SidebarInset, SidebarRail } from "@/components/ui/side
 import { AppSidebar, type NavKey } from "@/components/AppSidebar";
 import { AppTopbar } from "@/components/AppTopbar";
 import { ContactList } from "@/components/ContactList";
-import { AdminUserModal } from "@/components/AdminUserModal";
 import { ChatInterface } from "@/components/ChatInterface";
 import { TemplateLabModal } from "@/components/TemplateLabModal";
 import { SchedulerView } from "@/components/SchedulerView";
-import { UserManagementModal } from "@/components/UserManagementModal";
 import { ManageContactsModal } from "@/components/ManageContactsModal";
 import { ListManagerModal } from "@/components/ListManagerModal";
 import { HelpBot } from "@/components/HelpBot";
@@ -21,6 +19,8 @@ import { SessionsView } from "@/components/SessionsView";
 import { Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardAnalytics } from "@/components/DashboardAnalytics";
+import { SettingsView } from "@/components/SettingsView";
+import { TeamView } from "@/components/TeamView";
 import { PageHeader, PageWrap } from "@/components/PageWrap";
 import { tabSwap } from "@/lib/motion";
 import { toast } from "sonner";
@@ -42,8 +42,6 @@ const Index = () => {
   const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
   const [isListManagerOpen, setIsListManagerOpen] = useState(false);
   const [isManageContactsOpen, setIsManageContactsOpen] = useState(false);
-  const [isUserListOpen, setIsUserListOpen] = useState(false);
-  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
   const [isCallAnalysisOpen, setIsCallAnalysisOpen] = useState(false);
   const [isConversationOpen, setIsConversationOpen] = useState(false);
   const [isSessionsOpen, setIsSessionsOpen] = useState(false);
@@ -60,6 +58,7 @@ const Index = () => {
     mutationFn: () => api.request("/admin/toggle-ai", { method: "POST" }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      queryClient.invalidateQueries({ queryKey: ["app-settings"] });
       if (data.ai_enabled) {
         toast.success("Auto-reply enabled");
       } else {
@@ -105,8 +104,6 @@ const Index = () => {
     setIsSchedulerOpen(false);
     setIsListManagerOpen(false);
     setIsManageContactsOpen(false);
-    setIsUserListOpen(false);
-    setIsCreateUserOpen(false);
     setIsCallAnalysisOpen(false);
     setIsSessionsOpen(false);
     setIsConversationOpen(false);
@@ -130,7 +127,7 @@ const Index = () => {
     setActiveNav(fallback);
   };
 
-  const showInbox = activeNav === "inbox" || ["contacts", "lists", "templates", "scheduler", "help", "settings"].includes(activeNav);
+  const showInbox = activeNav === "inbox" || ["contacts", "lists", "templates", "scheduler", "help"].includes(activeNav);
 
   return (
     <div className="flex h-svh max-h-svh w-full flex-col overflow-hidden bg-background font-sans text-foreground">
@@ -139,7 +136,6 @@ const Index = () => {
           active={activeNav}
           onNavigate={handleNavigate}
           onLogout={handleLogout}
-          onOpenOperators={isAdmin ? () => setIsUserListOpen(true) : undefined}
           user={currentUser?.user}
           isAdmin={isAdmin}
           isConnected={isConnected}
@@ -154,7 +150,8 @@ const Index = () => {
             user={currentUser?.user}
             isAdmin={isAdmin}
             onLogout={handleLogout}
-            onOpenOperators={isAdmin ? () => setIsUserListOpen(true) : undefined}
+            onOpenOperators={isAdmin ? () => handleNavigate("team") : undefined}
+            onOpenSettings={() => handleNavigate("settings")}
             trailing={
               <button
                 type="button"
@@ -193,7 +190,7 @@ const Index = () => {
                 {activeNav === "analytics" ? (
                   <motion.div
                     key="analytics"
-                    className="min-h-0 flex-1 overflow-y-auto"
+                    className="chat-scroll min-h-0 flex-1 overflow-y-auto"
                     initial={tabSwap.initial}
                     animate={tabSwap.animate}
                     exit={tabSwap.exit}
@@ -211,6 +208,37 @@ const Index = () => {
                       />
                     </PageWrap>
                   </motion.div>
+                ) : activeNav === "settings" ? (
+                  <motion.div
+                    key="settings"
+                    className="chat-scroll min-h-0 flex-1 overflow-y-auto"
+                    initial={tabSwap.initial}
+                    animate={tabSwap.animate}
+                    exit={tabSwap.exit}
+                    transition={tabSwap.transition}
+                  >
+                    <SettingsView
+                      isAdmin={isAdmin}
+                      onLogout={handleLogout}
+                      onOpenOperators={isAdmin ? () => handleNavigate("team") : undefined}
+                      onOpenSessions={isAdmin ? () => handleNavigate("sessions") : undefined}
+                      onOpenHelp={() => window.dispatchEvent(new CustomEvent(OPEN_HELPBOT_EVENT))}
+                    />
+                  </motion.div>
+                ) : activeNav === "team" ? (
+                  <motion.div
+                    key="team"
+                    className="chat-scroll min-h-0 flex-1 overflow-y-auto"
+                    initial={tabSwap.initial}
+                    animate={tabSwap.animate}
+                    exit={tabSwap.exit}
+                    transition={tabSwap.transition}
+                  >
+                    <TeamView
+                      isAdmin={isAdmin}
+                      onOpenSessions={isAdmin ? () => handleNavigate("sessions") : undefined}
+                    />
+                  </motion.div>
                 ) : showInbox ? (
                   <motion.div
                     key="inbox"
@@ -223,9 +251,9 @@ const Index = () => {
                     <div
                       className={cn(
                         "flex min-h-0 min-w-0 flex-col overflow-hidden border-r bg-background transition-[width] duration-300 ease-expo",
-                        selectedContact ? "hidden md:flex" : "flex",
-                        contactListCollapsed ? "md:w-14" : "w-full md:w-72 lg:w-80",
-                        "md:shrink-0",
+                        selectedContact ? "hidden lg:flex" : "flex",
+                        contactListCollapsed ? "lg:w-14" : "w-full lg:w-80 xl:w-96",
+                        "lg:shrink-0",
                       )}
                     >
                       <ContactList
@@ -238,7 +266,7 @@ const Index = () => {
                     <div
                       className={cn(
                         "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
-                        selectedContact ? "flex" : "hidden md:flex",
+                        selectedContact ? "flex" : "hidden lg:flex",
                       )}
                     >
                       <ChatInterface
@@ -273,15 +301,6 @@ const Index = () => {
       <SchedulerView isOpen={isSchedulerOpen} onClose={() => closeOverlay()} />
       <ConversationView isOpen={isConversationOpen} onClose={() => closeOverlay()} />
       <ListManagerModal isOpen={isListManagerOpen} onClose={() => closeOverlay()} />
-      <UserManagementModal
-        isOpen={isUserListOpen}
-        onClose={() => setIsUserListOpen(false)}
-        onOpenCreate={() => {
-          setIsUserListOpen(false);
-          setIsCreateUserOpen(true);
-        }}
-      />
-      <AdminUserModal isOpen={isCreateUserOpen} onClose={() => setIsCreateUserOpen(false)} />
     </div>
   );
 };

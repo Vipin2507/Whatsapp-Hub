@@ -15,6 +15,7 @@ import {
   MessageCircle,
   XCircle,
   Filter,
+  MoreVertical,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
@@ -38,12 +39,20 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { BulkImportModal } from "./BulkImportModal";
 import { BulkActionModal } from "./BulkActionModal";
 import { normalizeContactPhone } from "@/lib/phone";
 import { EASE, hoverLift, tapScale } from "@/lib/motion";
 import { StatusPill } from "@/components/PendingChip";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useAppPreferences } from "@/hooks/use-app-settings";
 
 interface ContactListProps {
   selectedContact: string | null;
@@ -92,8 +101,10 @@ export function ContactList({
   onCollapsedChange,
 }: ContactListProps) {
   const queryClient = useQueryClient();
+  const isCompact = useIsMobile();
+  const prefs = useAppPreferences();
   const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const isCollapsed = collapsedProp !== undefined ? collapsedProp : internalCollapsed;
+  const isCollapsed = !isCompact && (collapsedProp !== undefined ? collapsedProp : internalCollapsed);
   const handleToggleCollapsed = () => {
     const next = !isCollapsed;
     onCollapsedChange?.(next);
@@ -210,7 +221,7 @@ export function ContactList({
   const updateContactMutation = useMutation({
     mutationFn: async () => {
       if (!editingContact?.id) throw new Error("No contact");
-      const phone = normalizeContactPhone(editPhoneInput);
+      const phone = normalizeContactPhone(editPhoneInput, prefs.default_country_code);
       if (!phone) throw new Error("Invalid phone");
       return api.contacts.update(editingContact.id, {
         name: editingContact.name,
@@ -247,7 +258,7 @@ export function ContactList({
 
   const handleAddContact = () => {
     if (!newName || !newPhone) return toast.error("Name and phone are required");
-    const phone = normalizeContactPhone(newPhone);
+    const phone = normalizeContactPhone(newPhone, prefs.default_country_code);
     if (!phone) return toast.error("Enter a valid phone number");
     addContactMutation.mutate({
       name: newName,
@@ -282,7 +293,7 @@ export function ContactList({
           variant="ghost"
           size="icon"
           onClick={handleToggleCollapsed}
-          className="ml-auto hidden h-8 w-8 shrink-0 text-muted-foreground md:inline-flex"
+          className="ml-auto hidden h-8 w-8 shrink-0 text-muted-foreground lg:inline-flex"
           title={isCollapsed ? "Show chats" : "Hide chats"}
         >
           {isCollapsed ? <ChevronsRight className="h-3.5 w-3.5" /> : <ChevronsLeft className="h-3.5 w-3.5" />}
@@ -297,7 +308,7 @@ export function ContactList({
               placeholder="Search name or number"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 rounded-lg bg-muted/40 pl-8 text-xs"
+              className="h-9 rounded-lg bg-muted/40 pl-8 text-xs"
             />
             {searchQuery ? (
               <button
@@ -311,8 +322,8 @@ export function ContactList({
           </div>
           <div className="flex gap-1.5">
             <Select value={filterStage} onValueChange={setFilterStage}>
-              <SelectTrigger className="h-8 flex-1 text-[11px]">
-                <Tag className="mr-1 h-3 w-3" />
+              <SelectTrigger className="h-9 min-w-0 flex-1 text-[11px]">
+                <Tag className="mr-1 h-3 w-3 shrink-0" />
                 <SelectValue placeholder="Stage" />
               </SelectTrigger>
               <SelectContent>
@@ -325,8 +336,8 @@ export function ContactList({
               </SelectContent>
             </Select>
             <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger className="h-8 w-[108px] text-[11px]">
-                <Clock className="mr-1 h-3 w-3" />
+              <SelectTrigger className="h-9 min-w-0 flex-1 text-[11px]">
+                <Clock className="mr-1 h-3 w-3 shrink-0" />
                 <SelectValue placeholder="Date" />
               </SelectTrigger>
               <SelectContent>
@@ -428,7 +439,7 @@ export function ContactList({
                     <button
                       type="button"
                       onClick={(e) => toggleSelect(contact.id!, e)}
-                      className="flex w-8 shrink-0 items-center justify-center text-muted-foreground"
+                      className="flex w-11 shrink-0 items-center justify-center text-muted-foreground"
                     >
                       {selectedIds.includes(contact.id!) ? (
                         <CheckSquare className="h-3.5 w-3.5 text-primary" />
@@ -441,8 +452,8 @@ export function ContactList({
                     type="button"
                     onClick={() => onSelectContact(contact.phone)}
                     className={cn(
-                      "group relative flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left",
-                      active && "bg-primary/8",
+                      "group relative flex min-h-[3.5rem] min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left",
+                      active && "bg-primary/10",
                       highlighted && "bg-primary/12",
                       !active && "hover:bg-muted/40",
                     )}
@@ -465,35 +476,46 @@ export function ContactList({
                       <div className="mt-0.5 flex items-center gap-1.5">
                         <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{preview}</p>
                         {contact.stage ? (
-                          <StatusPill label={contact.stage} tone={stageTone(contact.stage)} className="hidden shrink-0 px-1.5 py-0 text-[9px] lg:inline-flex" />
+                          <StatusPill
+                            label={contact.stage}
+                            tone={stageTone(contact.stage)}
+                            className="max-w-[4.75rem] shrink-0 truncate px-1.5 py-0 text-[9px]"
+                          />
                         ) : null}
                       </div>
                     </div>
-                    <div className="absolute right-1.5 top-1 hidden gap-0.5 group-hover:flex">
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 bg-card/90 text-muted-foreground hover:text-primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEdit(contact);
-                        }}
+                        className="h-10 w-10 shrink-0 text-muted-foreground"
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label="Contact actions"
                       >
-                        <Edit3 className="h-3 w-3" />
+                        <MoreVertical className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 bg-card/90 text-muted-foreground hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem
+                        className="cursor-pointer gap-2"
+                        onClick={() => handleStartEdit(contact)}
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                        onClick={() => {
                           if (window.confirm(`Delete ${contact.name}?`)) deleteContactMutation.mutate(contact.id!);
                         }}
                       >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </button>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </motion.div>
               );
             })}
@@ -508,7 +530,7 @@ export function ContactList({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.2, ease: EASE }}
-            className="pointer-events-none absolute inset-x-0 bottom-16 flex justify-center"
+            className="pointer-events-none absolute inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] flex justify-center pr-14 sm:pr-0"
           >
             <motion.button
               type="button"
@@ -523,10 +545,15 @@ export function ContactList({
         )}
       </AnimatePresence>
 
-      <div className={cn("shrink-0 border-t p-2", isCollapsed ? "flex flex-col gap-1.5" : "grid grid-cols-2 gap-1.5")}>
+      <div
+        className={cn(
+          "shrink-0 border-t p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pr-14 lg:pr-2",
+          isCollapsed ? "flex flex-col gap-1.5" : "grid grid-cols-2 gap-1.5",
+        )}
+      >
         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className={cn("h-8 w-full text-xs", isCollapsed && "px-0")}>
+            <Button size="sm" className={cn("h-9 w-full text-xs", isCollapsed && "px-0")}>
               <UserPlus className="h-3.5 w-3.5" />
               {!isCollapsed && "New"}
             </Button>
@@ -588,7 +615,7 @@ export function ContactList({
           variant="outline"
           size="sm"
           onClick={() => setIsBulkModalOpen(true)}
-          className={cn("h-8 w-full text-xs", isCollapsed && "px-0")}
+          className={cn("h-9 w-full text-xs", isCollapsed && "px-0")}
         >
           <Upload className="h-3.5 w-3.5" />
           {!isCollapsed && "Import"}

@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 import { extractRawPhoneFromRow, normalizeContactPhone } from "@/lib/phone";
+import { useAppPreferences } from "@/hooks/use-app-settings";
 import { BroadcastModal } from "./BroadcastModal";
 import { ListEditorModal } from "./ListEditorModal";
 
@@ -25,6 +26,7 @@ interface ListManagerModalProps {
 
 export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
   const queryClient = useQueryClient();
+  const prefs = useAppPreferences();
   const [searchQuery, setSearchQuery] = useState("");
 
   // Creation State
@@ -101,7 +103,7 @@ export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
 
       if (!title) return; // Skip rows without list title
 
-      const cleanedPhone = normalizeContactPhone(extractRawPhoneFromRow(row as Record<string, unknown>));
+      const cleanedPhone = normalizeContactPhone(extractRawPhoneFromRow(row as Record<string, unknown>), prefs.default_country_code);
 
       if (!listsMap.has(title)) {
         listsMap.set(title, { title, description, leads: [] });

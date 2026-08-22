@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { extractRawPhoneFromRow, normalizeContactPhone } from "@/lib/phone";
+import { useAppPreferences } from "@/hooks/use-app-settings";
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -23,6 +24,8 @@ interface BulkImportModalProps {
 
 export function BulkImportModal({ isOpen, onClose }: BulkImportModalProps) {
   const queryClient = useQueryClient();
+  const prefs = useAppPreferences();
+  const cc = prefs.default_country_code;
   const [isParsing, setIsParsing] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [selectedListId, setSelectedListId] = useState<string>("none");
@@ -45,10 +48,10 @@ export function BulkImportModal({ isOpen, onClose }: BulkImportModalProps) {
     () =>
       new Set(
         existingContacts
-          .map((c) => normalizeContactPhone(c.phone))
+          .map((c) => normalizeContactPhone(c.phone, cc))
           .filter((p) => p.length > 0)
       ),
-    [existingContacts]
+    [existingContacts, cc]
   );
 
   const newContacts = useMemo(
@@ -88,7 +91,7 @@ export function BulkImportModal({ isOpen, onClose }: BulkImportModalProps) {
   const sanitizeBulkData = (data: any[]) => {
     return data.map(row => {
       const rawPhone = extractRawPhoneFromRow(row as Record<string, unknown>);
-      const cleaned = normalizeContactPhone(rawPhone);
+      const cleaned = normalizeContactPhone(rawPhone, cc);
       return {
         ...row,
         phone: cleaned,
@@ -111,10 +114,10 @@ export function BulkImportModal({ isOpen, onClose }: BulkImportModalProps) {
       if (selectedListId && selectedListId !== "none" && createdCount > 0) {
         const allContacts = await queryClient.fetchQuery({ queryKey: ["contacts"], queryFn: api.contacts.getAll });
         const phonesToFind = new Set(
-          contactsToCreate.map((c) => normalizeContactPhone(c.phone)).filter((p) => p.length > 0)
+          contactsToCreate.map((c) => normalizeContactPhone(c.phone, cc)).filter((p) => p.length > 0)
         );
         const ids = allContacts
-          .filter((c) => c.phone && phonesToFind.has(normalizeContactPhone(c.phone)))
+          .filter((c) => c.phone && phonesToFind.has(normalizeContactPhone(c.phone, cc)))
           .map((c) => c.id!)
           .filter(Boolean);
         if (ids.length > 0) {

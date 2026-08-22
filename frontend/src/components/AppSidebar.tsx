@@ -14,6 +14,7 @@ import {
   Shield,
   Smartphone,
   Bot,
+  X,
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,13 +50,13 @@ export type NavKey =
   | "conversations"
   | "calls"
   | "settings"
+  | "team"
   | "help";
 
 export interface AppSidebarProps {
   active: NavKey;
   onNavigate: (key: NavKey) => void;
   onLogout: () => void;
-  onOpenOperators?: () => void;
   user?: { username: string };
   isAdmin?: boolean;
   isConnected?: boolean;
@@ -75,14 +76,13 @@ export function AppSidebar({
   active,
   onNavigate,
   onLogout,
-  onOpenOperators,
   user,
   isAdmin,
   isConnected,
   userLoading,
 }: AppSidebarProps) {
   const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
-  const collapsed = state === "collapsed";
+  const collapsed = !isMobile && state === "collapsed";
   const go = (key: NavKey) => {
     onNavigate(key);
     if (isMobile) setOpenMobile(false);
@@ -90,6 +90,7 @@ export function AppSidebar({
 
   const secondary: { key: NavKey; label: string; icon: typeof Building2; show?: boolean }[] = [
     { key: "sessions", label: "Sessions", icon: Smartphone, show: isAdmin },
+    { key: "team", label: "Team", icon: Shield, show: isAdmin },
     { key: "conversations", label: "Conversations", icon: Bot, show: true },
     { key: "calls", label: "Call analysis", icon: Mic, show: true },
     { key: "settings", label: "Settings", icon: Settings, show: true },
@@ -108,9 +109,12 @@ export function AppSidebar({
       >
         <button
           type="button"
-          onClick={toggleSidebar}
-          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={isMobile ? undefined : toggleSidebar}
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground",
+            isMobile ? "cursor-default" : "cursor-pointer",
+          )}
+          aria-label={isMobile ? "Buildesk" : collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <MessageSquare className="h-4 w-4" />
         </button>
@@ -124,15 +128,26 @@ export function AppSidebar({
                 Operations
               </span>
             </div>
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              aria-label="Collapse sidebar"
-              title="Collapse"
-            >
-              <ChevronsLeft className="h-3.5 w-3.5" />
-            </button>
+            {isMobile ? (
+              <button
+                type="button"
+                onClick={() => setOpenMobile(false)}
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                aria-label="Close menu"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                aria-label="Collapse sidebar"
+                title="Collapse"
+              >
+                <ChevronsLeft className="h-3.5 w-3.5" />
+              </button>
+            )}
           </>
         )}
       </SidebarHeader>
@@ -148,6 +163,7 @@ export function AppSidebar({
                     item={item}
                     active={active === item.key}
                     collapsed={collapsed}
+                    compact={isMobile}
                     onClick={() => go(item.key)}
                   />
                 ))}
@@ -168,6 +184,7 @@ export function AppSidebar({
                       item={item}
                       active={active === item.key}
                       collapsed={collapsed}
+                      compact={isMobile}
                       onClick={() => go(item.key)}
                     />
                   ))}
@@ -192,7 +209,7 @@ export function AppSidebar({
               type="button"
               className={cn(
                 "flex w-full cursor-pointer items-center gap-2 rounded-md hover:bg-sidebar-accent",
-                collapsed ? "h-9 w-9 justify-center p-0" : "px-1.5 py-1.5",
+                collapsed ? "h-9 w-9 justify-center p-0" : "min-h-11 px-1.5 py-1.5",
               )}
             >
               <Avatar className="h-7 w-7 shrink-0">
@@ -208,8 +225,8 @@ export function AppSidebar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="right" className="w-48">
-            {isAdmin && onOpenOperators && (
-              <DropdownMenuItem onClick={onOpenOperators}>
+            {isAdmin && (
+              <DropdownMenuItem onClick={() => go("team")}>
                 <Shield className="mr-2 h-4 w-4" />
                 Team
               </DropdownMenuItem>
@@ -229,11 +246,13 @@ function NavButton({
   item,
   active,
   collapsed,
+  compact,
   onClick,
 }: {
   item: { key: string; label: string; icon: typeof Building2 };
   active: boolean;
   collapsed: boolean;
+  compact?: boolean;
   onClick: () => void;
 }) {
   const Icon = item.icon;
@@ -246,6 +265,7 @@ function NavButton({
         className={cn(
           "relative flex cursor-pointer items-center rounded-md text-[13px] font-medium",
           collapsed ? "mx-auto h-9 w-9 justify-center" : "w-full gap-2 px-2.5 py-1.5",
+          compact && "min-h-11 px-3 py-2.5",
           active ? "text-white" : "text-sidebar-foreground/75 hover:text-sidebar-foreground",
         )}
       >

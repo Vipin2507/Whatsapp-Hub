@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   PieChart,
   Pie,
   Cell,
@@ -26,7 +28,7 @@ import {
   Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format, subDays } from "date-fns";
+import { format, parseISO, subDays } from "date-fns";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { KpiCard } from "@/components/KpiCard";
@@ -71,6 +73,14 @@ interface DashboardAnalyticsProps {
   onOpenContacts?: () => void;
   onOpenScheduler?: () => void;
   onOpenLists?: () => void;
+}
+
+function tickDate(value: string) {
+  try {
+    return format(parseISO(value), "d MMM");
+  } catch {
+    return value;
+  }
 }
 
 export function DashboardAnalytics({
@@ -130,17 +140,36 @@ export function DashboardAnalytics({
     }));
   }, [stats?.stage_distribution]);
 
+  const timeline = useMemo(
+    () =>
+      (stats?.messages_timeline ?? []).map((d) => ({
+        ...d,
+        label: tickDate(d.date),
+      })),
+    [stats?.messages_timeline],
+  );
+
+  const workload = useMemo(
+    () => [
+      { name: "Contacts", short: "Ctc", value: stats?.total_leads ?? 0, fill: SERIES.primary },
+      { name: "Messages", short: "Msg", value: stats?.total_msgs ?? 0, fill: SERIES.deep },
+      { name: "Queued", short: "Q", value: stats?.pending_schedules ?? 0, fill: SERIES.warning },
+      { name: "Lists", short: "Lst", value: stats?.total_segments ?? 0, fill: SERIES.success },
+    ],
+    [stats],
+  );
+
   const closed = stats?.stage_distribution?.Closed ?? 0;
   const total = stats?.total_leads ?? 0;
   const healthPct = total > 0 ? Math.round((closed / total) * 100) : 0;
   const pending = stats?.pending_schedules ?? 0;
 
   if (isLoading) {
-    return <BrandedLoader overlay className={cn("min-h-[320px]", className)} />;
+    return <BrandedLoader overlay className={cn("min-h-[min(60dvh,24rem)]", className)} />;
   }
 
   return (
-    <div className={cn("space-y-2.5", className)}>
+    <div className={cn("space-y-3", className)}>
       {(pending > 0 || (stats?.recent_leads ?? 0) > 0) && (
         <div className="flex flex-wrap gap-1.5">
           {pending > 0 && (
@@ -164,7 +193,7 @@ export function DashboardAnalytics({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {[
           {
             key: "contacts",
@@ -200,105 +229,134 @@ export function DashboardAnalytics({
             onClick: onOpenScheduler,
           },
         ].map((kpi, i) => (
-          <motion.div key={kpi.key} {...cardStagger(i)}>
+          <motion.div key={kpi.key} className="min-w-0" {...cardStagger(i)}>
             <KpiCard
               {...kpi}
               active={activeKpi === kpi.key}
-              onClick={() => {
-                setActiveKpi(kpi.key);
-                kpi.onClick?.();
-              }}
+              onClick={
+                kpi.onClick
+                  ? () => {
+                      setActiveKpi(kpi.key);
+                      kpi.onClick?.();
+                    }
+                  : undefined
+              }
             />
           </motion.div>
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Range</span>
-        {DATE_PRESETS.map((p) => (
-          <button
-            key={p.days}
-            type="button"
-            onClick={() => {
-              setUseCustomRange(false);
-              setDatePreset(p.days);
-            }}
-            className={cn(
-              "h-8 cursor-pointer rounded-md border px-2 text-xs font-medium",
-              !useCustomRange && datePreset === p.days
-                ? "border-primary/30 bg-primary/10 text-primary"
-                : "border-border bg-card text-muted-foreground hover:bg-muted/40",
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
-        <Select
-          value={useCustomRange ? "custom" : String(datePreset)}
-          onValueChange={(v) => {
-            if (v === "custom") {
-              setUseCustomRange(true);
-              const to = new Date();
-              const from = subDays(to, 7);
-              setCustomFrom(format(from, "yyyy-MM-dd"));
-              setCustomTo(format(to, "yyyy-MM-dd"));
-            } else {
-              setUseCustomRange(false);
-              setDatePreset(Number(v));
-            }
-          }}
-        >
-          <SelectTrigger className="h-8 w-[120px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Filter className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
+          <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto scrollbar-none">
             {DATE_PRESETS.map((p) => (
-              <SelectItem key={p.days} value={String(p.days)}>
+              <button
+                key={p.days}
+                type="button"
+                onClick={() => {
+                  setUseCustomRange(false);
+                  setDatePreset(p.days);
+                }}
+                className={cn(
+                  "h-8 shrink-0 cursor-pointer rounded-md border px-2.5 text-xs font-medium",
+                  !useCustomRange && datePreset === p.days
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : "border-border bg-card text-muted-foreground hover:bg-muted/40",
+                )}
+              >
                 {p.label}
-              </SelectItem>
+              </button>
             ))}
-            <SelectItem value="custom">Custom</SelectItem>
-          </SelectContent>
-        </Select>
-        {useCustomRange && (
-          <>
-            <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-8 w-full min-w-0 text-xs sm:w-[132px]" />
-            <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-8 w-full min-w-0 text-xs sm:w-[132px]" />
-          </>
-        )}
-        <Select value={stageFilter} onValueChange={setStageFilter}>
-          <SelectTrigger className="h-8 w-[120px] text-xs">
-            <SelectValue placeholder="Stage" />
-          </SelectTrigger>
-          <SelectContent>
-            {STAGES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
-          {isFetching ? "Updating…" : `${total} records`}
-        </span>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="h-8">
-          <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleExportCSV} className="h-8">
-          <Download className="h-3.5 w-3.5" />
-        </Button>
+            <button
+              type="button"
+              onClick={() => {
+                setUseCustomRange(true);
+                const to = new Date();
+                const from = subDays(to, 7);
+                setCustomFrom(format(from, "yyyy-MM-dd"));
+                setCustomTo(format(to, "yyyy-MM-dd"));
+              }}
+              className={cn(
+                "h-8 shrink-0 cursor-pointer rounded-md border px-2.5 text-xs font-medium",
+                useCustomRange
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted/40",
+              )}
+            >
+              Custom
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+          <Select value={stageFilter} onValueChange={setStageFilter}>
+            <SelectTrigger className="h-8 w-full text-xs sm:w-[132px]">
+              <SelectValue placeholder="Stage" />
+            </SelectTrigger>
+            <SelectContent>
+              {STAGES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="hidden text-[10px] tabular-nums text-muted-foreground md:inline">
+            {isFetching ? "Updating…" : `${total} records`}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="h-8 w-8 px-0" title="Refresh">
+            <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportCSV} className="h-8 w-8 px-0" title="Export CSV">
+            <Download className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
-        <div className="card-soft p-2.5 lg:col-span-3">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Account mix</p>
+      {useCustomRange && (
+        <div className="grid grid-cols-2 gap-1.5 sm:max-w-sm">
+          <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-8 min-w-0 text-xs" />
+          <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-8 min-w-0 text-xs" />
+        </div>
+      )}
+
+      <div className="card-soft min-w-0 p-3 sm:p-4">
+        <div className="mb-2 flex items-baseline justify-between gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Messages</p>
+          <p className="text-[10px] tabular-nums text-muted-foreground md:hidden">
+            {isFetching ? "Updating…" : `${total} records`}
+          </p>
+        </div>
+        {timeline.length > 0 ? (
+          <div className="h-40 sm:h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={timeline} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" interval="preserveStartEnd" minTickGap={24} />
+                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" allowDecimals={false} width={32} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ""}
+                />
+                <Line type="monotone" dataKey="count" name="Messages" stroke={SERIES.primary} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <EmptyChart className="h-40 sm:h-48" />
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <div className="card-soft min-w-0 p-3 sm:p-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Account mix</p>
           {stageData.length > 0 ? (
             <>
-              <div className="h-28">
+              <div className="h-36 sm:h-40">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={stageData} dataKey="value" innerRadius={28} outerRadius={46} paddingAngle={2} stroke="none">
+                    <Pie data={stageData} dataKey="value" innerRadius={36} outerRadius={58} paddingAngle={2} stroke="none">
                       {stageData.map((entry, i) => (
                         <Cell key={i} fill={entry.fill} />
                       ))}
@@ -313,7 +371,10 @@ export function DashboardAnalytics({
                     key={s.name}
                     type="button"
                     onClick={() => setStageFilter(s.name)}
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium hover:border-primary/30"
+                    className={cn(
+                      "inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium hover:border-primary/30",
+                      stageFilter === s.name && "border-primary/40 bg-primary/10",
+                    )}
                   >
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.fill }} />
                     {s.name}
@@ -327,28 +388,24 @@ export function DashboardAnalytics({
           )}
         </div>
 
-        <div className="card-soft p-2.5 lg:col-span-3">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Workload</p>
-          <div className="h-32">
+        <div className="card-soft min-w-0 p-3 sm:p-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Workload</p>
+          <div className="h-36 sm:h-40">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={[
-                  { name: "Contacts", value: stats?.total_leads ?? 0, fill: SERIES.primary },
-                  { name: "Messages", value: stats?.total_msgs ?? 0, fill: SERIES.deep },
-                  { name: "Queued", value: pending, fill: SERIES.warning },
-                  { name: "Lists", value: stats?.total_segments ?? 0, fill: SERIES.success },
-                ]}
-                margin={{ top: 4, right: 4, left: -18, bottom: 0 }}
-              >
+              <BarChart data={workload} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(var(--muted))" }} />
+                <XAxis dataKey="short" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" interval={0} />
+                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={28} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  cursor={{ fill: "hsl(var(--muted))" }}
+                  labelFormatter={(_, payload) => payload?.[0]?.payload?.name ?? ""}
+                />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {[SERIES.primary, SERIES.deep, SERIES.warning, SERIES.success].map((fill, i) => (
+                  {workload.map((row, i) => (
                     <Cell
-                      key={i}
-                      fill={fill}
+                      key={row.name}
+                      fill={row.fill}
                       className="cursor-pointer"
                       onClick={() => {
                         if (i === 0) onOpenContacts?.();
@@ -363,19 +420,19 @@ export function DashboardAnalytics({
           </div>
         </div>
 
-        <div className="card-soft p-2.5 lg:col-span-3">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Pipeline</p>
+        <div className="card-soft min-w-0 p-3 sm:p-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Pipeline</p>
           {stageData.length > 0 ? (
-            <div className="h-32">
+            <div className="h-36 sm:h-40">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stageData} layout="vertical" margin={{ top: 0, right: 8, left: 4, bottom: 0 }}>
+                <BarChart data={stageData} layout="vertical" margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis type="category" dataKey="name" width={68} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                   <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(var(--muted))" }} />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]} className="cursor-pointer">
-                    {stageData.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} onClick={() => setStageFilter(entry.name)} />
+                    {stageData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} onClick={() => setStageFilter(entry.name)} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -386,9 +443,9 @@ export function DashboardAnalytics({
           )}
         </div>
 
-        <div className="card-soft p-2.5 lg:col-span-3">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Health</p>
-          <div className="flex items-center gap-3">
+        <div className="card-soft min-w-0 p-3 sm:p-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Health</p>
+          <div className="flex h-36 items-center gap-3 sm:h-40">
             <HealthRing percent={healthPct} />
             <div className="min-w-0 flex-1 space-y-1.5">
               <p className="text-xs text-muted-foreground">
@@ -401,7 +458,7 @@ export function DashboardAnalytics({
                   <div className="h-full bg-warning" style={{ width: `${Math.min(100 - healthPct, pending > 0 ? 20 : 8)}%` }} />
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground">Completion vs remaining pipeline</p>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">Completion vs remaining pipeline</p>
             </div>
           </div>
         </div>
@@ -410,24 +467,24 @@ export function DashboardAnalytics({
   );
 }
 
-function EmptyChart() {
+function EmptyChart({ className }: { className?: string }) {
   return (
-    <div className="flex h-28 flex-col items-center justify-center gap-1 text-center">
+    <div className={cn("flex h-36 flex-col items-center justify-center gap-1 text-center sm:h-40", className)}>
       <p className="text-xs text-muted-foreground">No data in this range</p>
     </div>
   );
 }
 
 function HealthRing({ percent }: { percent: number }) {
-  const r = 22;
+  const r = 26;
   const c = 2 * Math.PI * r;
   const offset = c - (Math.min(100, Math.max(0, percent)) / 100) * c;
   return (
-    <svg viewBox="0 0 56 56" className="h-16 w-16 shrink-0">
-      <circle cx="28" cy="28" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="5" />
+    <svg viewBox="0 0 64 64" className="h-16 w-16 shrink-0 sm:h-[4.5rem] sm:w-[4.5rem]">
+      <circle cx="32" cy="32" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="5" />
       <circle
-        cx="28"
-        cy="28"
+        cx="32"
+        cy="32"
         r={r}
         fill="none"
         stroke="var(--color-chart-success)"
@@ -435,9 +492,9 @@ function HealthRing({ percent }: { percent: number }) {
         strokeLinecap="round"
         strokeDasharray={c}
         strokeDashoffset={offset}
-        transform="rotate(-90 28 28)"
+        transform="rotate(-90 32 32)"
       />
-      <text x="28" y="32" textAnchor="middle" className="fill-foreground text-[11px] font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>
+      <text x="32" y="36" textAnchor="middle" className="fill-foreground text-[11px] font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>
         {percent}%
       </text>
     </svg>

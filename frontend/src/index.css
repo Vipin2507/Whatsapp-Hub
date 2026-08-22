@@ -217,7 +217,7 @@ html.theme-transition *::after {
     background: hsl(var(--background));
     padding-bottom: env(safe-area-inset-bottom);
   }
-  @media (min-width: 768px) {
+  @media (min-width: 1024px) {
     .app-overlay {
       left: var(--app-sidebar-width, 13rem);
     }
@@ -237,6 +237,21 @@ html.theme-transition *::after {
 
   .table-scroll {
     @apply w-full min-w-0 overflow-x-auto;
+  }
+
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--sidebar-border)) transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--sidebar-border));
+    border-radius: 999px;
   }
 
   .chat-scroll {

@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { EASE, hoverLift, tapScale } from "@/lib/motion";
 import { StatusPill } from "@/components/PendingChip";
+import { useAppPreferences } from "@/hooks/use-app-settings";
 
 const ATTACHMENT_ACCEPT = {
   document: ".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv",
@@ -65,6 +66,7 @@ export function ChatInterface({
   const bottomRef = useRef<HTMLDivElement>(null);
   const [fileAccept, setFileAccept] = useState<string>(ATTACHMENT_ACCEPT.document);
   const queryClient = useQueryClient();
+  const prefs = useAppPreferences();
 
   const { data: contacts = [] } = useQuery({
     queryKey: ["contacts"],
@@ -458,7 +460,7 @@ export function ChatInterface({
                 )}
               </AnimatePresence>
 
-              <div className="flex items-end gap-1.5">
+              <div className="flex items-end gap-1.5 pr-14 sm:pr-16">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -523,7 +525,7 @@ export function ChatInterface({
                     rows={1}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey && !isSending) {
+                      if (e.key === "Enter" && !e.shiftKey && !isSending && prefs.enter_to_send) {
                         e.preventDefault();
                         handleSend();
                       }

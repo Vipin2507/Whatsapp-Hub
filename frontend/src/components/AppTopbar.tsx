@@ -1,10 +1,11 @@
-import { Bell, Menu, Search, LogOut, Shield } from "lucide-react";
+import { Bell, Menu, Search, LogOut, Shield, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useSidebar } from "@/components/ui/sidebar";
+import { useAppPreferences } from "@/hooks/use-app-settings";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +21,7 @@ interface AppTopbarProps {
   isAdmin?: boolean;
   onLogout: () => void;
   onOpenOperators?: () => void;
+  onOpenSettings?: () => void;
   trailing?: ReactNode;
 }
 
@@ -31,16 +33,19 @@ export function AppTopbar({
   isAdmin,
   onLogout,
   onOpenOperators,
+  onOpenSettings,
   trailing,
 }: AppTopbarProps) {
   const { toggleSidebar } = useSidebar();
+  const prefs = useAppPreferences();
+  const showPendingBadge = prefs.notify_pending_schedules && notificationCount > 0;
 
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-2 backdrop-blur sm:px-4">
       <Button
         variant="ghost"
         size="icon"
-        className="md:hidden"
+        className="lg:hidden"
         onClick={toggleSidebar}
         aria-label="Open menu"
       >
@@ -62,7 +67,7 @@ export function AppTopbar({
         <ThemeToggle />
         <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
           <Bell className="h-4 w-4" />
-          {notificationCount > 0 && (
+          {showPendingBadge && (
             <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-destructive" />
           )}
         </Button>
@@ -80,6 +85,12 @@ export function AppTopbar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
+            {onOpenSettings ? (
+              <DropdownMenuItem onClick={onOpenSettings}>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+            ) : null}
             {isAdmin && onOpenOperators && (
               <DropdownMenuItem onClick={onOpenOperators}>
                 <Shield className="mr-2 h-4 w-4" />
