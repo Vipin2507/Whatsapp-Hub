@@ -1,0 +1,12 @@
+flask
+flask-sqlalchemy
+flask-cors
+flask-login
+flask-bcrypt
+gunicorn
+requests
+apscheduler
+pandas
+google-generativeai
+pydub
+SpeechRecognition

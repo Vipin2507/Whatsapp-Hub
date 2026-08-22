@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=${DOMAIN_NAME:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://72.60.200.185:5678/
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=MySecurePassword123
+      - N8N_SECURE_COOKIE=false
+      - N8N_ENDPOINT_REST_CORS_ORIGIN=*
+      - N8N_ENDPOINT_HTTP_CORS_ORIGIN=*
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  waha:
+    image: devlikeapro/waha-plus:latest
+    container_name: waha
+    restart: always
+    environment:
+      - WHATSAPP_DEFAULT_ENGINE=NOWEB
+      - WAHA_API_KEY=MySecretWAHAKey
+      - WAHA_DASHBOARD_USERNAME=admin
+      - WAHA_DASHBOARD_PASSWORD=MySecurePassword123
+      - WAHA_CHAT_STORAGE_ENABLED=true
+      - WHATSAPP_CHAT_STORAGE_ENABLED=true
+    ports:
+      - "3000:3000"
+    volumes:
+      - waha_data:/app/.waha
+
+  buildesk-backend:
+    build: ./backend
+    container_name: buildesk-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend/instance:/app/instance
+    environment:
+      - WAHA_API=http://waha:3000
+      - WAHA_KEY=MySecretWAHAKey
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    depends_on:
+      - waha
+
+  buildesk-frontend:
+    build: ./frontend
+    container_name: buildesk-frontend
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - buildesk-backend
+
+volumes:
+  n8n_data:
+  waha_data:

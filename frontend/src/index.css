@@ -1,0 +1,143 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* --- LIGHT THEME (Default) --- */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 6%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 222 47% 6%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 6%;
+
+    /* Brand Cobalt (Adjusted for Light Bg) */
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --primary-glow: 221 83% 70%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 6%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 6%;
+
+    /* Status Colors (Standard HSL) */
+    --emerald: 142 76% 45%;
+    --rose: 350 89% 60%;
+    --indigo: 239 84% 67%;
+    --purple: 270 91% 65%;
+    --amber: 38 92% 50%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    --radius: 1.5rem;
+
+    /* Sidebar Light */
+    --sidebar-background: 210 40% 98%;
+    --sidebar-foreground: 222 47% 10%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-accent: 210 40% 94%;
+    --sidebar-accent-foreground: 222 47% 10%;
+    --sidebar-ring: 221 83% 53%;
+  }
+
+  .dark {
+    /* --- TACTICAL DARK THEME (Your Original Buildesk Theme) --- */
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --primary-glow: 217 91% 70%;
+
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 215 28% 14%;
+    --muted-foreground: 215 20% 55%;
+
+    --accent: 215 28% 20%;
+    --accent-foreground: 210 40% 98%;
+
+    --border: 215 28% 18%;
+    --input: 215 28% 15%;
+    --ring: 217 91% 60%;
+
+    --sidebar-background: 222 47% 7%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-border: 215 28% 16%;
+    --sidebar-accent: 215 28% 14%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-ring: 217 91% 60%;
+
+    /* Glass Effect Overrides for Dark */
+    --glass-bg: 222 47% 11% / 0.7;
+    --glass-border: 215 28% 25% / 0.3;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border transition-colors duration-300;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+@layer components {
+  /* Glassmorphism - Automatically adapts via HSL variables */
+  .glass {
+    @apply bg-card/70 backdrop-blur-xl border border-border/30 shadow-xl;
+  }
+
+  /* Glow Effects - Adjust opacity for light mode */
+  .glow-primary {
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.2), 0 0 40px hsl(var(--primary) / 0.1);
+  }
+  .dark .glow-primary {
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.3), 0 0 40px hsl(var(--primary) / 0.1);
+  }
+
+  /* Message Bubbles - Dynamic contrast */
+  .message-mine {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    @apply text-white rounded-3xl rounded-br-lg;
+  }
+
+  .message-customer {
+    @apply bg-secondary/50 text-foreground border border-border rounded-3xl rounded-bl-lg;
+  }
+
+  /* Status Indicators */
+  .status-ring::after {
+    content: '';
+    @apply absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background;
+  }
+  .status-ring.active::after {
+    @apply bg-emerald;
+    animation: pulse-glow 2s infinite;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary-glow;
+  }
+}
