@@ -471,26 +471,27 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed top-0 right-0 bottom-0 left-[var(--app-sidebar-width,16rem)] z-[100] flex flex-col bg-background animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="app-overlay z-[100]">
 
       {/* 1. TOP COMMAND BAR */}
-      <div className="h-28 border-b border-border bg-card/50 backdrop-blur-xl px-10 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-6">
+      <div className="app-overlay-header">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
           <Button
             variant="ghost"
             onClick={onClose}
             className="group flex items-center gap-3 text-muted-foreground hover:text-primary font-black uppercase text-xs tracking-widest transition-all"
           >
             <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-            Return to Hub
+            <span className="hidden sm:inline">Return to Hub</span>
+            <span className="sm:hidden">Back</span>
           </Button>
-          <div className="w-px h-8 bg-border" />
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 dark:from-amber-500/30 dark:to-amber-600/20 flex items-center justify-center border border-amber-500/30 dark:border-amber-500/40 shadow-lg shadow-amber-500/10">
+          <div className="hidden h-8 w-px bg-border sm:block" />
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-600 sm:flex">
               <Calendar className="w-7 h-7 text-amber-500 dark:text-amber-400" />
             </div>
             <div>
-              <h2 className="text-2xl font-black tracking-tighter text-foreground">Scheduler</h2>
+              <h2 className="text-sm font-semibold tracking-tight sm:text-lg">Scheduler</h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Active Monitoring</span>
@@ -499,8 +500,7 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Quick Stats */}
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <div className="hidden lg:flex items-center gap-3 px-4 py-2 bg-secondary/30 rounded-xl border border-border/50">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-amber-500" />
@@ -516,7 +516,7 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative w-64">
+            <div className="relative min-w-0 w-full sm:w-48 lg:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 value={searchQuery}
@@ -530,7 +530,7 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
                 </button>
               )}
             </div>
-            <div className="relative w-44">
+            <div className="relative w-full sm:w-44">
               <Layers className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input
                 value={searchByListName}
@@ -559,25 +559,27 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
               )}
             </div>
           </div>
-          <Button onClick={onClose} variant="secondary" className="h-11 w-11 rounded-xl p-0 hover:bg-destructive hover:text-white transition-all">
+          <Button onClick={onClose} variant="ghost" size="icon" className="h-8 w-8 shrink-0">
             <X className="w-5 h-5" />
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="app-split">
 
         {/* Create Schedule panel - collapsible */}
         <Collapsible open={createPanelExpanded} onOpenChange={setCreatePanelExpanded} asChild>
           <aside className={cn(
             "border-r border-border bg-gradient-to-b from-secondary/5 to-background overflow-hidden flex flex-col transition-[width] duration-200",
-            createPanelExpanded ? "w-[32%] min-w-[440px]" : "w-14 shrink-0"
+            createPanelExpanded
+              ? "max-h-[48dvh] w-full min-w-0 border-b lg:max-h-none lg:w-[min(100%,24rem)] lg:border-b-0 lg:border-r"
+              : "h-11 w-full shrink-0 border-b lg:h-auto lg:w-14 lg:border-b-0 lg:border-r"
           )}>
             {!createPanelExpanded && (
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
-                  className="w-full h-full min-h-[200px] flex flex-col items-center justify-center gap-2 py-6 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/5 transition-colors"
+                  className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-2 py-2 text-muted-foreground transition-colors hover:bg-amber-500/5 hover:text-amber-500 lg:min-h-[200px] lg:py-6"
                   title="Expand Create Schedule"
                 >
                   <ChevronRight className="w-5 h-5" />
@@ -588,7 +590,7 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
               </CollapsibleTrigger>
             )}
             <CollapsibleContent asChild>
-              <div className="w-[440px] min-w-[440px] p-8 overflow-y-auto space-y-6 custom-scrollbar h-full">
+              <div className="h-full min-w-0 w-full space-y-6 overflow-y-auto p-3 sm:p-6 custom-scrollbar">
                 <div className="space-y-5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1100,7 +1102,7 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
         </Collapsible>
 
         {/* Scheduled messages list - with analysis view (All | Single | Bulk) */}
-        <main className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-background flex flex-col min-w-0">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-background p-3 sm:p-6 custom-scrollbar">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
             <div className="flex items-center gap-4">
               <h3 className="text-lg font-bold text-foreground">Scheduled Messages</h3>
@@ -1346,6 +1348,8 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
 
           {/* LIST HEADERS (All / Single view only) - compact grid like Contacts */}
           {analysisView !== "bulk" && (
+            <div className="table-scroll">
+            <div className="min-w-[720px] lg:min-w-0">
             <div className="grid grid-cols-12 gap-4 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b-2 border-border/60 bg-muted/20 rounded-t-lg items-center">
               <div className="col-span-1 flex justify-center">
                 <button
@@ -1540,6 +1544,8 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
                 </div>
               );
             })}
+          </div>
+          </div>
           </div>
         </main>
       </div>

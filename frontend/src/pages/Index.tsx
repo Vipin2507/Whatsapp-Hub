@@ -133,7 +133,7 @@ const Index = () => {
   const showInbox = activeNav === "inbox" || ["contacts", "lists", "templates", "scheduler", "help", "settings"].includes(activeNav);
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-background font-sans text-foreground">
+    <div className="flex h-svh max-h-svh w-full flex-col overflow-hidden bg-background font-sans text-foreground">
       <SidebarProvider defaultOpen={false}>
         <AppSidebar
           active={activeNav}
@@ -146,7 +146,7 @@ const Index = () => {
           userLoading={userLoading}
         />
 
-        <SidebarInset className="min-h-0 overflow-hidden">
+        <SidebarInset className="min-h-0 h-full overflow-hidden">
           <AppTopbar
             search={search}
             onSearchChange={setSearch}
@@ -222,8 +222,10 @@ const Index = () => {
                   >
                     <div
                       className={cn(
-                        "flex shrink-0 flex-col overflow-hidden border-r bg-background transition-[width] duration-300 ease-expo",
-                        contactListCollapsed ? "w-14" : "w-72 lg:w-80",
+                        "flex min-h-0 min-w-0 flex-col overflow-hidden border-r bg-background transition-[width] duration-300 ease-expo",
+                        selectedContact ? "hidden md:flex" : "flex",
+                        contactListCollapsed ? "md:w-14" : "w-full md:w-72 lg:w-80",
+                        "md:shrink-0",
                       )}
                     >
                       <ContactList
@@ -233,7 +235,12 @@ const Index = () => {
                         onCollapsedChange={setContactListCollapsed}
                       />
                     </div>
-                    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+                    <div
+                      className={cn(
+                        "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
+                        selectedContact ? "flex" : "hidden md:flex",
+                      )}
+                    >
                       <ChatInterface
                         activeContact={selectedContact}
                         onOpenTemplates={() => handleNavigate("templates")}

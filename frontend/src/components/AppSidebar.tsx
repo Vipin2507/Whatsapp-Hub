@@ -8,7 +8,7 @@ import {
   LogOut,
   MessageSquare,
   Mic,
-  PanelLeft,
+  ChevronsLeft,
   Rocket,
   Settings,
   Shield,
@@ -81,8 +81,12 @@ export function AppSidebar({
   isConnected,
   userLoading,
 }: AppSidebarProps) {
-  const { state, toggleSidebar } = useSidebar();
+  const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
+  const go = (key: NavKey) => {
+    onNavigate(key);
+    if (isMobile) setOpenMobile(false);
+  };
 
   const secondary: { key: NavKey; label: string; icon: typeof Building2; show?: boolean }[] = [
     { key: "sessions", label: "Sessions", icon: Smartphone, show: isAdmin },
@@ -123,10 +127,11 @@ export function AppSidebar({
             <button
               type="button"
               onClick={toggleSidebar}
-              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-foreground"
               aria-label="Collapse sidebar"
+              title="Collapse"
             >
-              <PanelLeft className="h-4 w-4" />
+              <ChevronsLeft className="h-3.5 w-3.5" />
             </button>
           </>
         )}
@@ -143,7 +148,7 @@ export function AppSidebar({
                     item={item}
                     active={active === item.key}
                     collapsed={collapsed}
-                    onClick={() => onNavigate(item.key)}
+                    onClick={() => go(item.key)}
                   />
                 ))}
               </SidebarMenu>
@@ -163,7 +168,7 @@ export function AppSidebar({
                       item={item}
                       active={active === item.key}
                       collapsed={collapsed}
-                      onClick={() => onNavigate(item.key)}
+                      onClick={() => go(item.key)}
                     />
                   ))}
               </SidebarMenu>

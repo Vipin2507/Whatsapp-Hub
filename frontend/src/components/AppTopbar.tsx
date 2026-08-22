@@ -36,7 +36,7 @@ export function AppTopbar({
   const { toggleSidebar } = useSidebar();
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur sm:px-4 md:h-16">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-2 backdrop-blur sm:px-4">
       <Button
         variant="ghost"
         size="icon"
@@ -47,13 +47,13 @@ export function AppTopbar({
         <Menu className="h-4 w-4" />
       </Button>
 
-      <div className="relative min-w-0 flex-1 max-w-md">
+      <div className="relative hidden min-w-0 flex-1 max-w-md sm:block">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={search}
           onChange={(e) => onSearchChange?.(e.target.value)}
           placeholder="Search contacts, lists, tickets…"
-          className="h-10 rounded-lg border bg-card pl-9 text-sm"
+          className="h-9 rounded-lg border bg-card pl-9 text-sm"
         />
       </div>
 

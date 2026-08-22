@@ -95,26 +95,26 @@ export function CallAnalysisView({ isOpen, onClose, embedded = false }: CallAnal
 
   return (
     <div className={embedded ? "flex-1 flex flex-col min-h-0 overflow-hidden bg-background" : "fixed inset-0 z-[100] flex flex-col bg-background"}>
-      <header className="shrink-0 flex items-center justify-between gap-4 border-b border-border/50 bg-card/50 px-6 py-4">
+      <header className="app-overlay-header">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={onClose} className="gap-2 text-muted-foreground hover:text-foreground">
             <ChevronLeft className="w-4 h-4" /> Back
           </Button>
-          <div className="w-px h-8 bg-border/50" />
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center border border-violet-500/20">
-              <Mic className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+          <div className="hidden h-8 w-px bg-border/50 sm:block" />
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary sm:flex">
+              <Mic className="h-4 w-4" />
             </div>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">Call Analysis</h1>
-              <p className="text-xs text-muted-foreground">Upload audio, get AI summary and next actions</p>
+            <div className="min-w-0">
+              <h1 className="text-sm font-semibold tracking-tight sm:text-lg">Call Analysis</h1>
+              <p className="hidden text-xs text-muted-foreground sm:block">Upload audio, get AI summary and next actions</p>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <aside className="w-[380px] shrink-0 border-r border-border/50 bg-muted/20 p-6 overflow-y-auto">
+      <div className="app-split">
+        <aside className="app-split-side max-h-[46dvh] lg:max-h-none">
           <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-violet-500" /> New analysis
           </h2>
@@ -203,13 +203,13 @@ export function CallAnalysisView({ isOpen, onClose, embedded = false }: CallAnal
           </div>
         </aside>
 
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-border/50">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="border-b border-border/50 p-3 sm:p-4">
             <h3 className="text-sm font-semibold text-foreground">Reports</h3>
             <p className="text-xs text-muted-foreground">{reports.length} report{reports.length !== 1 ? "s" : ""}</p>
           </div>
-          <div className="flex-1 flex overflow-hidden">
-            <div className="w-72 shrink-0 border-r border-border/50 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+            <div className="max-h-[35dvh] w-full shrink-0 overflow-y-auto border-b border-border/50 md:max-h-none md:w-64 md:border-b-0 md:border-r lg:w-72">
               {isLoading ? (
                 <div className="p-6 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
               ) : isError && reportsError ? (
@@ -259,7 +259,7 @@ export function CallAnalysisView({ isOpen, onClose, embedded = false }: CallAnal
                 </ul>
               )}
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="min-w-0 flex-1 overflow-y-auto p-3 sm:p-6">
               {selectedReportId == null ? (
                 <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
                   Select a report or upload a new audio file

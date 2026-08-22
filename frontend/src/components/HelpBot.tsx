@@ -82,10 +82,9 @@ export function HelpBot() {
   };
 
   return (
-    <div className="fixed bottom-24 right-8 z-[9999]">
-      {/* 1. CHAT INTERFACE WINDOW */}
+    <div className="fixed z-[9999] bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))]">
       {isOpen && (
-        <div className="absolute bottom-20 right-0 w-96 h-[550px] bg-gradient-to-br from-background via-background to-secondary/5 border border-border/50 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 duration-500 ring-1 ring-border/30 backdrop-blur-xl">
+        <div className="absolute bottom-16 right-0 flex h-[min(32rem,calc(100dvh-6rem))] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-xl border bg-card shadow-elevated sm:w-96">
 
           {/* HEADER: Tactics & Branding */}
           <div className="p-6 bg-gradient-to-r from-primary via-primary/95 to-primary text-primary-foreground flex items-center justify-between shadow-lg relative overflow-hidden">
@@ -166,8 +165,8 @@ export function HelpBot() {
       {/* 2. MAIN FLOATING TRIGGER */}
       <Button
         onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "w-16 h-16 rounded-full shadow-2xl transition-all duration-300 flex items-center justify-center group border-4 border-background",
+          className={cn(
+          "flex h-12 w-12 items-center justify-center rounded-full border-2 border-background shadow-elevated transition-all duration-300 sm:h-14 sm:w-14",
           isOpen
             ? "bg-gradient-to-br from-secondary to-secondary/80 rotate-90 scale-90"
             : "bg-gradient-to-br from-primary to-primary/90 hover:from-primary/90 hover:to-primary hover:scale-110 hover:shadow-primary/50 active:scale-95"

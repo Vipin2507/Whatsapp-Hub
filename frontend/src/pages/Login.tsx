@@ -3,10 +3,11 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, Lock, User } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -21,7 +22,9 @@ const formSchema = z.object({
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/";
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -34,11 +37,17 @@ const Login = () => {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
       const data = await response.json();
       if (response.ok && data.status === "success") {
+        queryClient.setQueryData(["auth-status"], {
+          logged_in: true,
+          user: data.user,
+        });
+        await queryClient.invalidateQueries({ queryKey: ["current-user"] });
         sessionStorage.setItem("skip-loader", "1");
         toast.success(`Signed in as ${data.user.username}`);
         navigate(from, { replace: true });
@@ -53,8 +62,8 @@ const Login = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center bg-background p-6 text-foreground">
-      <ThemeToggle className="absolute right-4 top-4" />
+    <div className="relative flex min-h-dvh w-full items-center justify-center bg-background p-4 text-foreground sm:p-6">
+      <ThemeToggle className="absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))]" />
 
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -99,8 +108,22 @@ const Login = () => {
                   <FormLabel>Password</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input type="password" placeholder="••••••••" className="h-10 pl-9" {...field} />
+                      <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        className="h-10 pl-9 pr-10"
+                        {...field}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        title={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
                   </FormControl>
                   <FormMessage className="text-xs" />

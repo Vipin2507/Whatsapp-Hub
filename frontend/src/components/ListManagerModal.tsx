@@ -263,11 +263,11 @@ export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed top-0 right-0 bottom-0 left-[var(--app-sidebar-width,16rem)] z-[100] flex flex-col bg-background animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="app-overlay z-[100]">
 
       {/* 1. TOP COMMAND BAR */}
-      <div className="h-24 border-b border-border bg-card/50 backdrop-blur-xl px-10 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-6">
+      <div className="app-overlay-header">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
           <Button
             variant="ghost"
             onClick={onClose}
@@ -276,13 +276,13 @@ export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
             <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
             Back
           </Button>
-          <div className="w-px h-8 bg-border" />
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+          <div className="hidden h-8 w-px bg-border sm:block" />
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary sm:flex">
               <Layers className="w-6 h-6 text-indigo-500" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-foreground">Contact lists</h2>
+              <h2 className="truncate text-sm font-semibold tracking-tight sm:text-lg">Contact lists</h2>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
                 <span className="text-xs text-muted-foreground">{lists.length} lists</span>
@@ -291,26 +291,26 @@ export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="relative w-80">
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none lg:w-80">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search lists..."
-              className="pl-12 h-12 bg-secondary/30 border-border rounded-2xl font-bold"
+              className="h-9 pl-10 text-sm"
             />
           </div>
-          <Button onClick={onClose} variant="secondary" className="h-12 w-12 rounded-2xl p-0">
+          <Button onClick={onClose} variant="ghost" size="icon" className="h-8 w-8 shrink-0">
             <X className="w-6 h-6" />
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="app-split">
 
         {/* 2. INITIALIZATION FORGE (SIDEBAR - 30%) */}
-        <aside className="w-[30%] min-w-[380px] border-r border-border bg-secondary/5 p-10 overflow-y-auto space-y-10 custom-scrollbar">
+        <aside className="app-split-side custom-scrollbar max-h-[46dvh] space-y-6 lg:max-h-none">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -445,7 +445,7 @@ export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
         </aside>
 
         {/* 3. SEGMENT DIRECTORY (LIST VIEW - 70%) */}
-        <main className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-background">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-background p-3 sm:p-6 custom-scrollbar">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Your lists</h3>
@@ -486,6 +486,8 @@ export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
           </div>
 
           {/* LIST VIEW HEADERS - compact grid */}
+          <div className="table-scroll">
+          <div className="min-w-[640px] lg:min-w-0">
           <div className="grid grid-cols-12 gap-4 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b-2 border-border/60 bg-muted/20 rounded-t-lg items-center">
             <div className="col-span-1 flex justify-center">
               <button
@@ -592,6 +594,8 @@ export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
                 <p className="font-black uppercase text-sm tracking-[0.3em]">No lists found</p>
               </div>
             )}
+          </div>
+          </div>
           </div>
         </main>
       </div>

@@ -131,11 +131,10 @@ export function SessionsView({ isOpen, onClose, defaultSessionName }: SessionsVi
 
   return (
     <div
-      className="fixed top-0 right-0 bottom-0 left-[var(--app-sidebar-width,16rem)] z-40 flex flex-col bg-background border-l border-border/50"
-      style={{ width: "calc(100vw - var(--app-sidebar-width, 16rem))" }}
+      className="app-overlay z-40"
     >
-      <header className="shrink-0 flex items-center justify-between gap-4 border-b border-border/50 bg-card/50 px-6 py-4">
-        <div className="flex items-center gap-4">
+      <header className="app-overlay-header justify-between">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <Button variant="ghost" size="sm" onClick={onClose} className="gap-2 text-muted-foreground hover:text-foreground">
             <ChevronLeft className="h-4 w-4" />
             Back
@@ -145,8 +144,8 @@ export function SessionsView({ isOpen, onClose, defaultSessionName }: SessionsVi
             <h1 className="text-lg font-semibold">WhatsApp Sessions</h1>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Default: {defaultSessionName}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="hidden text-xs text-muted-foreground sm:inline">Default: {defaultSessionName}</span>
           <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />
             New session
@@ -154,7 +153,7 @@ export function SessionsView({ isOpen, onClose, defaultSessionName }: SessionsVi
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-6">
+      <main className="min-h-0 flex-1 overflow-auto p-3 sm:p-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -170,6 +169,8 @@ export function SessionsView({ isOpen, onClose, defaultSessionName }: SessionsVi
             </Button>
           </div>
         ) : (
+          <div className="table-scroll">
+          <div className="min-w-[720px] lg:min-w-0">
           <div className="grid grid-cols-12 gap-4">
             <div className="col-span-12 grid grid-cols-12 gap-2 px-2 py-2 border-b border-border/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               <div className="col-span-3">Name</div>
@@ -287,6 +288,8 @@ export function SessionsView({ isOpen, onClose, defaultSessionName }: SessionsVi
                 )}
               </div>
             ))}
+          </div>
+          </div>
           </div>
         )}
       </main>

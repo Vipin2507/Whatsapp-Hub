@@ -182,9 +182,9 @@ export function BulkImportModal({ isOpen, onClose }: BulkImportModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground rounded-[2.5rem] max-w-3xl shadow-2xl transition-all duration-500">
+      <DialogContent className="max-w-3xl">
         <DialogHeader className="pb-6 border-b border-border/50">
-          <div className="flex items-center justify-between w-full">
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20">
                 <Upload className="w-6 h-6 text-primary" />

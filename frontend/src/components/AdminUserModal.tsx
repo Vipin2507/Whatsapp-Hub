@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UserPlus, Key, Loader2, User, ShieldAlert } from "lucide-react";
+import { UserPlus, Key, Loader2, User, ShieldAlert, Eye, EyeOff } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Button } from "./ui/button";
@@ -19,6 +19,7 @@ export function AdminUserModal({ isOpen, onClose }: AdminUserModalProps) {
   const queryClient = useQueryClient();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: (data: any) => api.admin.createUser(data),
@@ -43,7 +44,7 @@ export function AdminUserModal({ isOpen, onClose }: AdminUserModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground rounded-[2.5rem] max-w-md shadow-2xl transition-colors duration-500">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4 border border-primary/20">
             <UserPlus className="w-8 h-8 text-primary" />
@@ -75,12 +76,21 @@ export function AdminUserModal({ isOpen, onClose }: AdminUserModalProps) {
             <div className="relative group">
               <Key className="absolute left-3 top-3.5 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
               <Input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="pl-10 h-12 bg-secondary/50 border-border rounded-2xl text-foreground placeholder:text-muted-foreground/50 font-bold"
+                className="h-12 bg-secondary/50 pl-10 pr-10 font-bold text-foreground placeholder:text-muted-foreground/50"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 

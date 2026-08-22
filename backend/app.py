@@ -2365,4 +2365,4 @@ if __name__ == "__main__":
             admin_pw = bcrypt.generate_password_hash('buildesk').decode('utf-8')
             db.session.add(User(username='admin', password=admin_pw))
             db.session.commit()
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))

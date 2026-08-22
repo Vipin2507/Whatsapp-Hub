@@ -11,7 +11,7 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-dvh items-center justify-center bg-background p-4">
       <div className="text-center">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Not found</p>
         <h1 className="mt-1 text-lg font-semibold tracking-tight">This page doesn’t exist</h1>

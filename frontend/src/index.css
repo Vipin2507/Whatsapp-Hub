@@ -133,6 +133,13 @@
     @apply font-sans antialiased;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+    min-height: 100dvh;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -201,15 +208,60 @@ html.theme-transition *::after {
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+
+  .app-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: hsl(var(--background));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  @media (min-width: 768px) {
+    .app-overlay {
+      left: var(--app-sidebar-width, 13rem);
+    }
+  }
+
+  .app-overlay-header {
+    @apply flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b bg-background/80 px-3 py-2 backdrop-blur sm:px-4;
+  }
+
+  .app-split {
+    @apply flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row;
+  }
+
+  .app-split-side {
+    @apply min-h-0 min-w-0 w-full shrink-0 overflow-y-auto border-b p-3 sm:p-4 lg:h-auto lg:max-h-none lg:w-[min(100%,22rem)] lg:border-b-0 lg:border-r;
+  }
+
+  .table-scroll {
+    @apply w-full min-w-0 overflow-x-auto;
+  }
+
+  .chat-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .chat-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .chat-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .chat-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
 }
 
 @layer components {
   .message-mine {
-    @apply rounded-lg rounded-br-sm bg-primary text-primary-foreground;
+    @apply bg-primary text-primary-foreground;
   }
 
   .message-customer {
-    @apply rounded-lg rounded-bl-sm border border-border bg-card text-foreground;
+    @apply border border-border bg-card text-foreground;
   }
 
   .status-ring::after {

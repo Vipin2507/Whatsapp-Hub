@@ -238,32 +238,34 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed top-0 right-0 bottom-0 left-[var(--app-sidebar-width,16rem)] z-[100] flex flex-col bg-background animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="app-overlay z-[100]">
       {/* Header */}
-      <div className="h-20 border-b border-border bg-card/50 backdrop-blur-xl px-10 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-6">
+      <div className="app-overlay-header">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
           <Button variant="ghost" onClick={onClose} className="gap-3 text-muted-foreground hover:text-primary">
             <ChevronLeft className="w-5 h-5" /> Back
           </Button>
-          <div className="w-px h-8 bg-border" />
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-violet-600/10 flex items-center justify-center border border-violet-500/30 shadow-lg">
+          <div className="hidden h-8 w-px bg-border sm:block" />
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary sm:flex">
               <MessageSquare className="w-7 h-7 text-violet-500" />
             </div>
             <div>
-              <h2 className="text-2xl font-black tracking-tighter text-foreground">Conversations</h2>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Automated message flows</p>
+              <h2 className="text-sm font-semibold tracking-tight sm:text-lg">Conversations</h2>
+              <p className="hidden text-[10px] text-muted-foreground sm:block">Automated message flows</p>
             </div>
           </div>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)} className="gap-2 bg-violet-600 hover:bg-violet-700">
+        <Button onClick={() => setShowCreateDialog(true)} size="sm" className="h-8 shrink-0">
           <Plus className="w-4 h-4" /> New Conversation
         </Button>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="app-split">
         {/* Main: Conversation List Grid */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 sm:p-6">
+          <div className="table-scroll">
+          <div className="min-w-[640px] lg:min-w-0">
           {/* Grid Headers */}
           <div className="grid grid-cols-12 gap-4 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b-2 border-border/60 bg-muted/20 rounded-t-lg items-center mb-4">
             <div className="col-span-3 font-semibold">Name</div>
@@ -342,11 +344,13 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
               ))}
             </div>
           )}
+          </div>
+          </div>
         </main>
 
         {/* Right Panel: Conversation Builder (when selected) */}
         {selectedConversationId !== null && (
-          <aside className="w-[500px] border-l border-border bg-muted/20 p-6 overflow-y-auto">
+          <aside className="min-h-0 w-full shrink-0 overflow-y-auto border-t bg-muted/20 p-3 sm:p-6 lg:w-[min(100%,28rem)] lg:border-l lg:border-t-0">
             {detailLoading ? (
               <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin" /></div>
             ) : conversationDetail ? (

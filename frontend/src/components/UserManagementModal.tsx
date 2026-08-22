@@ -73,7 +73,7 @@ export function UserManagementModal({ isOpen, onClose, onOpenCreate }: UserManag
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground rounded-[2.5rem] max-w-2xl shadow-2xl transition-colors duration-500">
+      <DialogContent className="max-w-2xl">
         <DialogHeader className="flex flex-row items-center justify-between border-b border-border/50 pb-6">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 glow-primary">

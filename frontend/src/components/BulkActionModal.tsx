@@ -120,7 +120,7 @@ export function BulkActionModal({ isOpen, onClose, selectedIds, selectedLeads, o
         modal={true}
       >
         <DialogContent
-          className="bg-background border-border text-foreground rounded-[2.5rem] max-w-3xl shadow-2xl overflow-hidden transition-all duration-500 !z-[151]"
+          className="max-w-3xl overflow-hidden"
           onInteractOutside={(e) => {
             e.preventDefault();
           }}
@@ -160,7 +160,7 @@ export function BulkActionModal({ isOpen, onClose, selectedIds, selectedLeads, o
             </div>
 
             {/* TRIPLE ACTION GRID */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {/* 1. STAGE UPDATE */}
               <div className="space-y-3">
                 <label className="text-[9px] font-black text-muted-foreground uppercase flex items-center gap-2 ml-1">

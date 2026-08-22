@@ -100,7 +100,7 @@ export function BroadcastModal({ isOpen, onClose, targetList }: BroadcastModalPr
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground rounded-[2.5rem] max-w-xl shadow-2xl overflow-hidden z-[300]">
+      <DialogContent className="max-w-xl">
         <DialogHeader className="p-8 border-b border-border/50 bg-indigo-500/5">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 glow-indigo">

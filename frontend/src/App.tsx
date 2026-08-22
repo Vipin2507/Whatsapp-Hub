@@ -14,23 +14,30 @@ const queryClient = new QueryClient();
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
 
-  const { data, isLoading } = useQuery({
+  const { data, isPending, isFetching } = useQuery({
     queryKey: ["auth-status"],
     queryFn: async () => {
       const res = await fetch("/api/auth/me", { credentials: "include" });
       return res.json();
     },
     retry: false,
+    staleTime: 0,
   });
 
-  if (isLoading) {
+  // Cached 401 from the first visit to / must not bounce a successful login.
+  const checking = isPending || (isFetching && !data?.logged_in);
+
+  if (checking) {
     const skip =
       typeof sessionStorage !== "undefined" && sessionStorage.getItem("skip-loader") === "1";
     if (skip) {
-      sessionStorage.removeItem("skip-loader");
       return <div className="h-screen w-full bg-background" />;
     }
     return <BrandedLoader />;
+  }
+
+  if (typeof sessionStorage !== "undefined") {
+    sessionStorage.removeItem("skip-loader");
   }
 
   if (!data?.logged_in) {

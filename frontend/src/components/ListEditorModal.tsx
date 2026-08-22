@@ -279,11 +279,11 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
   if (!isOpen || !targetList) return null;
 
   return (
-    <div className="fixed top-0 right-0 bottom-0 left-[var(--app-sidebar-width,16rem)] z-[110] flex flex-col bg-background animate-in fade-in zoom-in-95 duration-300">
+    <div className="app-overlay z-[110]">
 
       {/* COMMAND HEADER */}
-      <div className="h-24 border-b border-border bg-card/50 backdrop-blur-xl px-10 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-6">
+      <div className="app-overlay-header">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
           <Button
             variant="ghost"
             onClick={onClose}
@@ -292,13 +292,13 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
             <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
             Back to lists
           </Button>
-          <div className="w-px h-8 bg-border" />
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+          <div className="hidden h-8 w-px bg-border sm:block" />
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground sm:flex">
               <Target className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
-              <h2 className="text-xl font-black tracking-tighter uppercase text-foreground">
+              <h2 className="truncate text-sm font-semibold tracking-tight sm:text-lg">
                 Edit list: <span className="text-primary">{targetList.title}</span>
               </h2>
               <div className="flex items-center gap-2">
@@ -311,17 +311,17 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
           </div>
         </div>
 
-        <Button onClick={onClose} variant="secondary" className="h-12 w-12 rounded-2xl">
+        <Button onClick={onClose} variant="ghost" size="icon" className="h-8 w-8 shrink-0">
           <X className="w-6 h-6" />
         </Button>
       </div>
 
       {/* DUAL PANE INTERFACE */}
-      <div className="flex-1 flex overflow-hidden divide-x divide-border">
+      <div className="app-split divide-y divide-border lg:divide-x lg:divide-y-0">
 
         {/* LEFT PANE: GLOBAL DATABASE (THE SOURCE) */}
-        <div className="w-1/2 flex flex-col bg-secondary/5">
-          <div className="p-8 border-b border-border bg-background/50 backdrop-blur-sm">
+        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col bg-secondary/5">
+          <div className="border-b border-border bg-background/50 p-3 sm:p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                 <Database className="w-4 h-4" /> All contacts
@@ -542,6 +542,8 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="table-scroll">
+            <div className="min-w-[560px] lg:min-w-0">
             {/* HEADERS */}
             <div className="grid grid-cols-12 gap-4 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b-2 border-border/60 bg-muted/20 rounded-t-lg items-center sticky top-0 z-10">
               <div className="col-span-1 flex justify-center">
@@ -626,12 +628,14 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
                 <div className="text-center py-20 opacity-20 italic text-xs font-black uppercase tracking-widest">No contacts found</div>
               )}
             </div>
+            </div>
+            </div>
           </div>
         </div>
 
         {/* RIGHT PANE: SEGMENT MEMBERS (THE ACTIVE MATRIX) */}
-        <div className="w-1/2 flex flex-col bg-background">
-          <div className="p-8 border-b border-border bg-card/30">
+        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background">
+          <div className="border-b border-border bg-card/30 p-3 sm:p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4" /> In this list
@@ -649,6 +653,8 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="table-scroll">
+            <div className="min-w-[560px] lg:min-w-0">
             {/* HEADERS */}
             <div className="grid grid-cols-12 gap-4 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b-2 border-border/60 bg-muted/20 rounded-t-lg items-center sticky top-0 z-10">
               <div className="col-span-4 font-semibold">Name</div>
@@ -696,6 +702,8 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
               {filteredMembers.length === 0 && (
                 <div className="text-center py-20 text-sm text-muted-foreground">No contacts in this list yet</div>
               )}
+            </div>
+            </div>
             </div>
           </div>
         </div>

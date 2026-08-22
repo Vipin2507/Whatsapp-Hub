@@ -263,8 +263,8 @@ export function DashboardAnalytics({
         </Select>
         {useCustomRange && (
           <>
-            <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-8 w-[132px] text-xs" />
-            <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-8 w-[132px] text-xs" />
+            <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-8 w-full min-w-0 text-xs sm:w-[132px]" />
+            <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-8 w-full min-w-0 text-xs sm:w-[132px]" />
           </>
         )}
         <Select value={stageFilter} onValueChange={setStageFilter}>

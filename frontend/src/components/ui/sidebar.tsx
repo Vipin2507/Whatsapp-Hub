@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 const SIDEBAR_COOKIE_NAME = "sidebar:state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "13rem";
-const SIDEBAR_WIDTH_MOBILE = "13rem";
+const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3.25rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
@@ -103,16 +103,15 @@ const SidebarProvider = React.forwardRef<
   // This makes it easier to style the sidebar with Tailwind classes.
   const state = open ? "expanded" : "collapsed";
 
-  // Expose sidebar width on :root so full-screen modals can offset and keep sidebar visible.
+  // Expose sidebar width on :root so full-screen overlays can sit beside the rail.
+  // On mobile the rail is a sheet, so overlays must be full-bleed.
   React.useEffect(() => {
-    // Keep this in sync with the actual rendered collapsed sidebar width.
-    // Our collapsed rail is icon-only (`SIDEBAR_WIDTH_ICON`), so overlays should offset by that.
-    const width = state === "expanded" ? SIDEBAR_WIDTH : SIDEBAR_WIDTH_ICON;
+    const width = isMobile ? "0px" : state === "expanded" ? SIDEBAR_WIDTH : SIDEBAR_WIDTH_ICON;
     document.documentElement.style.setProperty("--app-sidebar-width", width);
     return () => {
       document.documentElement.style.removeProperty("--app-sidebar-width");
     };
-  }, [state]);
+  }, [state, isMobile]);
 
   const contextValue = React.useMemo<SidebarContext>(
     () => ({
@@ -186,7 +185,7 @@ const Sidebar = React.forwardRef<
           }
           side={side}
         >
-          <div className="flex h-full w-full flex-col">{children}</div>
+          <div className="flex h-full w-full flex-col pb-[env(safe-area-inset-bottom)]">{children}</div>
         </SheetContent>
       </Sheet>
     );
@@ -296,7 +295,7 @@ const SidebarInset = React.forwardRef<HTMLDivElement, React.ComponentProps<"main
     <main
       ref={ref}
       className={cn(
-        "relative flex min-h-svh flex-1 flex-col bg-background",
+        "relative flex min-h-0 flex-1 flex-col bg-background",
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className,
       )}

@@ -29,7 +29,7 @@ export function BrandedLoader({ overlay, className }: BrandedLoaderProps) {
         "flex flex-col items-center justify-center gap-5",
         overlay
           ? "absolute inset-0 z-50 bg-background/55 backdrop-blur-[3px]"
-          : "h-screen w-full bg-background",
+          : "h-svh w-full bg-background",
         className,
       )}
     >
