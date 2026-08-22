@@ -12,20 +12,26 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import text as sql_text
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_bcrypt import Bcrypt
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "buildesk_production_v5_2026")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.config["PREFERRED_URL_SCHEME"] = "https"
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "true").lower() in ("1", "true", "yes")
 
 # --- CORS SETUP ---
 CORS(app, supports_credentials=True, origins=[
-    "http://localhost:5173", 
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:8080",
     "http://72.60.200.185",
     "http://72.60.200.185:80",
-    "*"  # Allow all origins in production (nginx handles security)
+    "http://72.60.200.185:8080",
+    "https://waha.cravingcodetech.in",
 ])
 
 bcrypt = Bcrypt(app)

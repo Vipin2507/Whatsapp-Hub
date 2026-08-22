@@ -1,0 +1,24 @@
+{
+	email ssl@cravingcodetech.in
+}
+
+waha.cravingcodetech.in {
+	encode gzip
+
+	request_body {
+		max_size 100MB
+	}
+
+	handle /api* {
+		reverse_proxy buildesk-backend:5000 {
+			transport http {
+				read_timeout 10m
+				write_timeout 10m
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy buildesk-frontend:80
+	}
+}
