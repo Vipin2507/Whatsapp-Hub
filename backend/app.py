@@ -24,7 +24,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "true").lower() in ("1", "true", "yes")
 
 # --- CORS SETUP ---
-CORS(app, supports_credentials=True, origins=[
+_cors_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:8080",
@@ -32,7 +32,11 @@ CORS(app, supports_credentials=True, origins=[
     "http://72.60.200.185:80",
     "http://72.60.200.185:8080",
     "https://waha.cravingcodetech.in",
-])
+]
+_app_origin = os.getenv("APP_ORIGIN") or f"https://{os.getenv('APP_DOMAIN', 'app.cravingcodetech.in')}"
+if _app_origin not in _cors_origins:
+    _cors_origins.append(_app_origin)
+CORS(app, supports_credentials=True, origins=_cors_origins)
 
 bcrypt = Bcrypt(app)
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK", "http://n8n:5678/webhook/magic-ai-template")

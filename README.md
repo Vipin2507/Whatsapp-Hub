@@ -73,7 +73,16 @@ Styling/UI:
 cd /root/buildesk
 docker compose up --build
 ```
-Frontend: http://localhost:8080, Backend API through Nginx `/api`. WAHA at http://localhost:3000, n8n at http://localhost:5678 (basic auth).
+Frontend: **https://app.cravingcodetech.in** (Caddy + Let’s Encrypt). WAHA stays HTTP on `:3000`, n8n on `:5678`.
+
+Point a DNS **A** record for `APP_DOMAIN` at the VPS, then on the VPS:
+
+```bash
+echo 'APP_DOMAIN=app.cravingcodetech.in' >> /root/buildesk/.env
+cd /root/buildesk && docker compose up -d
+```
+
+If host nginx already owns 80/443, stop it or Caddy cannot bind (`systemctl stop nginx`).
 
 ### Auto-deploy on GitHub push
 Pushes to `main` sync the repo to the VPS and rebuild the app containers (`buildesk-frontend`, `buildesk-backend`). SQLite in `backend/instance/` is never overwritten.

@@ -34,11 +34,8 @@ services:
       - WAHA_DASHBOARD_PASSWORD=MySecurePassword123
       - WAHA_CHAT_STORAGE_ENABLED=true
       - WHATSAPP_CHAT_STORAGE_ENABLED=true
-      - WHATSAPP_API_SCHEMA=https
-      - WAHA_BASE_URL=https://waha.cravingcodetech.in
-      - WAHA_PUBLIC_URL=https://waha.cravingcodetech.in
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     volumes:
       - waha_data:/app/.waha
 
@@ -50,26 +47,30 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:-app.cravingcodetech.in}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - buildesk-frontend
-      - buildesk-backend
 
   buildesk-backend:
     build: ./backend
     container_name: buildesk-backend
     restart: always
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - ./backend/instance:/app/instance
     environment:
       - WAHA_API=http://waha:3000
       - WAHA_KEY=MySecretWAHAKey
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - APP_DOMAIN=${APP_DOMAIN:-app.cravingcodetech.in}
+      - APP_ORIGIN=https://${APP_DOMAIN:-app.cravingcodetech.in}
+      - SESSION_COOKIE_SECURE=true
     depends_on:
       - waha
 
@@ -77,8 +78,8 @@ services:
     build: ./frontend
     container_name: buildesk-frontend
     restart: always
-    ports:
-      - "8080:80"
+    expose:
+      - "80"
     depends_on:
       - buildesk-backend
 
