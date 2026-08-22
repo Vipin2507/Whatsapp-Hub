@@ -1373,9 +1373,8 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
               <div className="col-span-2 text-center font-semibold">Time Until</div>
               <div className="col-span-3 text-right font-semibold">Actions</div>
             </div>
-          )}
 
-          <div className={cn("space-y-0 pb-20", analysisView === "bulk" && "hidden")}>
+            <div className="space-y-0 pb-20">
             {isLoading ? (
               <div className="h-64 flex flex-col items-center justify-center opacity-30">
                 <Loader2 className="w-10 h-10 animate-spin text-amber-500" />
@@ -1544,9 +1543,10 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
                 </div>
               );
             })}
-          </div>
-          </div>
-          </div>
+            </div>
+            </div>
+            </div>
+          )}
         </main>
       </div>
 
