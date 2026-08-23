@@ -94,6 +94,12 @@ function formatListTime(iso?: string | null) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function unreadLabel(count?: number) {
+  const n = count || 0;
+  if (n <= 0) return "";
+  return n > 99 ? "99+" : String(n);
+}
+
 export function ContactList({
   selectedContact,
   onSelectContact,
@@ -160,8 +166,15 @@ export function ContactList({
   const { data: contacts = [], isLoading } = useQuery({
     queryKey: ["contacts"],
     queryFn: api.contacts.getAll,
-    refetchInterval: 5000,
+    refetchInterval: 4000,
   });
+
+  const openChat = (phone: string) => {
+    queryClient.setQueryData<Contact[]>(["contacts"], (old) =>
+      old?.map((c) => (c.phone === phone ? { ...c, unread_count: 0 } : c)),
+    );
+    onSelectContact(phone);
+  };
 
   const prevTopPhoneRef = useRef<string | null>(null);
   const [highlightPhone, setHighlightPhone] = useState<string | null>(null);
@@ -405,6 +418,8 @@ export function ContactList({
               const highlighted = highlightPhone === contact.phone;
               const stamp = contact.last_message_at || contact.date;
               const preview = contact.last_message_preview?.trim() || contact.phone;
+              const unread = active ? 0 : contact.unread_count || 0;
+              const unreadText = unreadLabel(unread);
 
               if (isCollapsed) {
                 return (
@@ -412,9 +427,9 @@ export function ContactList({
                     key={contact.phone}
                     type="button"
                     title={contact.name || contact.phone}
-                    onClick={() => onSelectContact(contact.phone)}
+                    onClick={() => openChat(contact.phone)}
                     className={cn(
-                      "flex h-9 w-9 items-center justify-center rounded-full",
+                      "relative flex h-9 w-9 items-center justify-center rounded-full",
                       active ? "ring-2 ring-primary/50" : "hover:bg-muted/50",
                     )}
                   >
@@ -423,6 +438,11 @@ export function ContactList({
                         {(contact.name || "?").slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
+                    {unreadText ? (
+                      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-success px-0.5 text-[8px] font-semibold text-success-foreground">
+                        {unreadText}
+                      </span>
+                    ) : null}
                   </button>
                 );
               }
@@ -450,11 +470,12 @@ export function ContactList({
                   )}
                   <button
                     type="button"
-                    onClick={() => onSelectContact(contact.phone)}
+                    onClick={() => openChat(contact.phone)}
                     className={cn(
                       "group relative flex min-h-[3.5rem] min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left",
                       active && "bg-primary/10",
                       highlighted && "bg-primary/12",
+                      !active && unread > 0 && "bg-success/5",
                       !active && "hover:bg-muted/40",
                     )}
                   >
@@ -466,21 +487,44 @@ export function ContactList({
                     </Avatar>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2">
-                        <span className={cn("min-w-0 truncate text-[13px] font-medium", active && "text-primary")}>
+                        <span
+                          className={cn(
+                            "min-w-0 truncate text-[13px]",
+                            unread > 0 ? "font-semibold text-foreground" : "font-medium",
+                            active && "text-primary",
+                          )}
+                        >
                           {contact.name || "Unknown"}
                         </span>
-                        <span className="ml-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                        <span
+                          className={cn(
+                            "ml-auto shrink-0 text-[10px] tabular-nums",
+                            unread > 0 ? "font-semibold text-success" : "text-muted-foreground",
+                          )}
+                        >
                           {formatListTime(stamp)}
                         </span>
                       </div>
                       <div className="mt-0.5 flex items-center gap-1.5">
-                        <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{preview}</p>
-                        {contact.stage ? (
+                        <p
+                          className={cn(
+                            "min-w-0 flex-1 truncate text-[11px]",
+                            unread > 0 ? "font-medium text-foreground/80" : "text-muted-foreground",
+                          )}
+                        >
+                          {preview}
+                        </p>
+                        {contact.stage && unread === 0 ? (
                           <StatusPill
                             label={contact.stage}
                             tone={stageTone(contact.stage)}
                             className="max-w-[4.75rem] shrink-0 truncate px-1.5 py-0 text-[9px]"
                           />
+                        ) : null}
+                        {unreadText ? (
+                          <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-success px-1.5 text-[10px] font-semibold text-success-foreground">
+                            {unreadText}
+                          </span>
                         ) : null}
                       </div>
                     </div>

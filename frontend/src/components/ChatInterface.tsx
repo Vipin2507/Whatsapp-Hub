@@ -122,6 +122,7 @@ export function ChatInterface({
       setMessage("");
       setAttachment(null);
       queryClient.invalidateQueries({ queryKey: ["messages", activeContact] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
     },
     onError: () => toast.error("Could not send. Check WhatsApp connection."),
   });
@@ -145,6 +146,7 @@ export function ChatInterface({
       }
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["messages", contact] });
+        queryClient.invalidateQueries({ queryKey: ["contacts"] });
       }, 400);
       toast.success("Attachment sent");
     },
