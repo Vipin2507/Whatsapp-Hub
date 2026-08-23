@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import {
   Send,
   Paperclip,
@@ -117,6 +117,8 @@ export function ChatInterface({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
   const [fileAccept, setFileAccept] = useState<string>(ATTACHMENT_ACCEPT.document);
   const queryClient = useQueryClient();
   const prefs = useAppPreferences();
@@ -206,8 +208,50 @@ export function ChatInterface({
     onError: (e: Error) => toast.error(e.message || "Failed to send attachment"),
   });
 
+  const scrollToLatest = (behavior: ScrollBehavior = "auto") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  };
+
+  useLayoutEffect(() => {
+    stickToBottomRef.current = true;
+    scrollToLatest("auto");
+  }, [activeContact]);
+
+  useLayoutEffect(() => {
+    if (!stickToBottomRef.current) return;
+    scrollToLatest("auto");
+  }, [messages, isLoading]);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (!stickToBottomRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollToLatest("auto"));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages, activeContact, isLoading]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stickToBottomRef.current = distance < 96;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [activeContact]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onLoad = () => {
+      if (stickToBottomRef.current) scrollToLatest("auto");
+    };
+    const media = el.querySelectorAll("img, video");
+    media.forEach((node) => node.addEventListener("load", onLoad));
+    return () => media.forEach((node) => node.removeEventListener("load", onLoad));
   }, [messages, activeContact]);
 
   useEffect(() => {
@@ -364,7 +408,7 @@ export function ChatInterface({
               </DropdownMenu>
             </header>
 
-            <div className="chat-scroll relative min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5">
+            <div ref={scrollRef} className="chat-scroll relative min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5">
               <div
                 className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-20"
                 style={{
