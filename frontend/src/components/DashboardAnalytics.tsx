@@ -2,8 +2,8 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type DashboardStatsParams } from "@/lib/api";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { DateField } from "@/components/DateFields";
 import {
   BarChart,
   Bar,
@@ -316,8 +316,8 @@ export function DashboardAnalytics({
 
       {useCustomRange && (
         <div className="grid grid-cols-2 gap-1.5 sm:max-w-sm">
-          <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-8 min-w-0 text-xs" />
-          <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-8 min-w-0 text-xs" />
+          <DateField value={customFrom} onChange={setCustomFrom} placeholder="From" size="sm" />
+          <DateField value={customTo} onChange={setCustomTo} placeholder="To" size="sm" min={customFrom} />
         </div>
       )}
 

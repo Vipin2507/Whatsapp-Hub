@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { DateField, TimeField } from "@/components/DateFields";
 
 interface ConversationViewProps {
   isOpen: boolean;
@@ -755,11 +756,9 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
                 <label className="text-sm font-medium mb-1.5 block flex items-center gap-2">
                   <Calendar className="w-4 h-4" /> Start Date
                 </label>
-                <Input
-                  type="date"
+                <DateField
                   value={newConvScheduledTime ? newConvScheduledTime.split('T')[0] : ""}
-                  onChange={(e) => {
-                    const date = e.target.value;
+                  onChange={(date) => {
                     const time = newConvScheduledTime.includes('T') ? newConvScheduledTime.split('T')[1] : "09:00";
                     setNewConvScheduledTime(date ? `${date}T${time}` : "");
                   }}
@@ -770,11 +769,9 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
                 <label className="text-sm font-medium mb-1.5 block flex items-center gap-2">
                   <Clock className="w-4 h-4" /> Start Time
                 </label>
-                <Input
-                  type="time"
+                <TimeField
                   value={newConvScheduledTime && newConvScheduledTime.includes('T') ? newConvScheduledTime.split('T')[1] : "09:00"}
-                  onChange={(e) => {
-                    const time = e.target.value;
+                  onChange={(time) => {
                     const date = newConvScheduledTime.split('T')[0] || new Date().toISOString().split('T')[0];
                     setNewConvScheduledTime(`${date}T${time}`);
                   }}

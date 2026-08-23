@@ -47,6 +47,7 @@ import {
 import { toast } from "sonner";
 import { BulkImportModal } from "./BulkImportModal";
 import { BulkActionModal } from "./BulkActionModal";
+import { DateField } from "@/components/DateFields";
 import { normalizeContactPhone } from "@/lib/phone";
 import { EASE, hoverLift, tapScale } from "@/lib/motion";
 import { StatusPill } from "@/components/PendingChip";
@@ -355,8 +356,8 @@ export function ContactList({
           </div>
           {dateFilter === "range" && (
             <div className="grid grid-cols-2 gap-1.5">
-              <Input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} className="h-8 text-[11px]" />
-              <Input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} className="h-8 text-[11px]" />
+              <DateField value={rangeStart} onChange={setRangeStart} placeholder="From" size="sm" allowClear />
+              <DateField value={rangeEnd} onChange={setRangeEnd} placeholder="To" size="sm" allowClear min={rangeStart} />
             </div>
           )}
         </div>

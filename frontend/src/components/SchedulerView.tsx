@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { StatusPill } from "@/components/PendingChip";
 import { useAppPreferences } from "@/hooks/use-app-settings";
+import { DateField, DateTimeField, TimeField } from "@/components/DateFields";
 
 interface SchedulerViewProps {
   isOpen: boolean;
@@ -742,16 +743,14 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
                 {recurrenceType === "hourly" && "Minute"}
               </label>
               {recurrenceType === "once" && (
-                <Input
-                  type="datetime-local"
+                <DateTimeField
                   value={newTime}
-                  onChange={(e) => setNewTime(e.target.value)}
-                  className="h-9"
+                  onChange={setNewTime}
                   min={new Date().toISOString().slice(0, 16)}
                 />
               )}
               {recurrenceType === "daily" && (
-                <Input type="time" value={recurrenceTimeOnly} onChange={(e) => setRecurrenceTimeOnly(e.target.value)} className="h-9" />
+                <TimeField value={recurrenceTimeOnly} onChange={setRecurrenceTimeOnly} />
               )}
               {recurrenceType === "every_n_days" && (
                 <div className="space-y-2">
@@ -767,11 +766,9 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
                     />
                     <span className="text-xs text-muted-foreground">days</span>
                   </div>
-                  <Input
-                    type="datetime-local"
+                  <DateTimeField
                     value={newTime}
-                    onChange={(e) => setNewTime(e.target.value)}
-                    className="h-9"
+                    onChange={setNewTime}
                     min={new Date().toISOString().slice(0, 16)}
                   />
                 </div>
@@ -791,7 +788,7 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
                     ))}
                   </div>
                   {daysOfWeek.length > 0 ? (
-                    <Input type="time" value={recurrenceTimeOnly} onChange={(e) => setRecurrenceTimeOnly(e.target.value)} className="h-9" />
+                    <TimeField value={recurrenceTimeOnly} onChange={setRecurrenceTimeOnly} />
                   ) : (
                     <p className="text-[11px] text-muted-foreground">Select at least one day</p>
                   )}
@@ -907,12 +904,14 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
                   className="h-8 pl-8 text-xs"
                 />
               </div>
-              <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="h-8 w-36 text-xs" />
-              {filterDate ? (
-                <Button type="button" variant="ghost" size="sm" className="h-8 px-2" onClick={() => setFilterDate("")}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              ) : null}
+              <DateField
+                value={filterDate}
+                onChange={setFilterDate}
+                placeholder="Filter date"
+                size="sm"
+                allowClear
+                className="w-40"
+              />
               <p className="ml-auto text-[11px] text-muted-foreground">
                 <span className="font-medium tabular-nums text-foreground">
                   {analysisView === "bulk" ? batches.length : listForView.length}

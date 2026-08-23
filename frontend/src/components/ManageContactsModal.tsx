@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { BulkActionModal } from "./BulkActionModal";
 import { StatusPill } from "@/components/PendingChip";
+import { DateField } from "@/components/DateFields";
 
 interface ManageContactsModalProps {
   isOpen: boolean;
@@ -399,9 +400,9 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
 
             {dateFilter === "range" && (
               <div className="flex items-center gap-1.5">
-                <Input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} className="h-8 w-32 text-[11px]" />
+                <DateField value={rangeStart} onChange={setRangeStart} placeholder="From" size="sm" allowClear className="w-36" />
                 <span className="text-[11px] text-muted-foreground">to</span>
-                <Input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} className="h-8 w-32 text-[11px]" />
+                <DateField value={rangeEnd} onChange={setRangeEnd} placeholder="To" size="sm" allowClear min={rangeStart} className="w-36" />
               </div>
             )}
 

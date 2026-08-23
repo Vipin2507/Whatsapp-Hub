@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { extractRawPhoneFromRow, normalizeContactPhone } from "@/lib/phone";
 import { useAppPreferences } from "@/hooks/use-app-settings";
+import { DateField } from "@/components/DateFields";
 
 interface ListEditorModalProps {
   isOpen: boolean;
@@ -478,21 +479,9 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
 
                 {dateFilter === "range" && (
                   <div className="flex items-center gap-2">
-                    <Input
-                      type="date"
-                      value={rangeStart}
-                      onChange={(e) => setRangeStart(e.target.value)}
-                      className="h-9 w-32 text-[10px] rounded-lg bg-secondary/30 border-border"
-                      placeholder="Start"
-                    />
+                    <DateField value={rangeStart} onChange={setRangeStart} placeholder="From" size="sm" allowClear className="w-36" />
                     <span className="text-muted-foreground text-xs">to</span>
-                    <Input
-                      type="date"
-                      value={rangeEnd}
-                      onChange={(e) => setRangeEnd(e.target.value)}
-                      className="h-9 w-32 text-[10px] rounded-lg bg-secondary/30 border-border"
-                      placeholder="End"
-                    />
+                    <DateField value={rangeEnd} onChange={setRangeEnd} placeholder="To" size="sm" allowClear min={rangeStart} className="w-36" />
                   </div>
                 )}
 
