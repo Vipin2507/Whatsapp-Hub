@@ -822,37 +822,96 @@ def _mark_chat_read(user, phone):
         pass
 
 
+def _saved_leads_by_phone(user_id):
+    """Map sanitized phone / last-10 digits to leads already saved in the dashboard."""
+    by_phone = {}
+    by_tail = {}
+    for lead in Lead.query.filter_by(user_id=user_id).all():
+        if not lead.phone:
+            continue
+        phone = sanitize_phone(lead.phone) or lead.phone
+        by_phone[lead.phone] = lead
+        by_phone[phone] = lead
+        tail = phone[-10:] if len(phone) >= 10 else phone
+        by_tail[tail] = lead
+    return by_phone, by_tail
+
+
+def _lead_for_synced_phone(phone, by_phone, by_tail):
+    if not phone:
+        return None
+    lead = by_phone.get(phone)
+    if lead:
+        return lead
+    tail = phone[-10:] if len(phone) >= 10 else phone
+    return by_tail.get(tail)
+
+
+def _parse_waha_chat_list(response):
+    if response is None or not getattr(response, "ok", False):
+        return None
+    try:
+        payload = response.json()
+    except Exception:
+        return None
+    chats = payload if isinstance(payload, list) else (payload.get("chats") or payload.get("data"))
+    return chats if isinstance(chats, list) else None
+
+
+def _fetch_waha_overview_for_contacts(session_name, headers, chat_ids):
+    """Ask WAHA only for saved contacts; fall back to a recent list if filter is unsupported."""
+    overview = f"{WAHA_API}/api/{session_name}/chats/overview"
+    chats_url = f"{WAHA_API}/api/{session_name}/chats"
+    if chat_ids:
+        if len(chat_ids) > 80:
+            r = requests.post(
+                overview,
+                headers={**headers, "Content-Type": "application/json"},
+                json={"pagination": {"limit": min(len(chat_ids), 400), "offset": 0}, "filter": {"ids": chat_ids[:400]}},
+                timeout=4,
+            )
+            chats = _parse_waha_chat_list(r)
+            if chats is not None:
+                return chats
+        params = [("limit", str(min(max(len(chat_ids), 1), 200))), ("offset", "0")]
+        for cid in chat_ids[:200]:
+            params.append(("ids", cid))
+        r = requests.get(overview, headers=headers, params=params, timeout=4)
+        chats = _parse_waha_chat_list(r)
+        if chats is not None:
+            return chats
+    r = requests.get(f"{overview}?limit=80&offset=0", headers=headers, timeout=4)
+    chats = _parse_waha_chat_list(r)
+    if chats is not None:
+        return chats
+    r = requests.get(
+        f"{chats_url}?limit=80&offset=0&sortBy=conversationTimestamp&sortOrder=desc",
+        headers=headers,
+        timeout=4,
+    )
+    return _parse_waha_chat_list(r) or []
+
+
 def _sync_inbox_from_waha(user):
-    """Pull latest personal chats from WAHA so the inbox can sort and badge like WhatsApp."""
+    """Refresh last message + unread only for contacts already saved in the dashboard."""
     _ensure_lead_unread_column()
     now = time.time()
     last = _inbox_sync_at.get(user.id, 0)
     if now - last < 3:
         return
     _inbox_sync_at[user.id] = now
+    by_phone, by_tail = _saved_leads_by_phone(user.id)
+    if not by_phone:
+        return
+    chat_ids = [f"{phone}@c.us" for phone in {lead.phone for lead in by_phone.values() if lead.phone}]
     session_name = get_waha_default_session(user.id)
     headers = {"X-Api-Key": WAHA_KEY}
-    chats = None
     try:
-        r = requests.get(
-            f"{WAHA_API}/api/{session_name}/chats/overview?limit=80&offset=0",
-            headers=headers,
-            timeout=4,
-        )
-        if not r.ok:
-            r = requests.get(
-                f"{WAHA_API}/api/{session_name}/chats?limit=80&offset=0&sortBy=conversationTimestamp&sortOrder=desc",
-                headers=headers,
-                timeout=4,
-            )
-        if not r.ok:
-            return
-        payload = r.json()
-        chats = payload if isinstance(payload, list) else payload.get("chats") or payload.get("data")
-        if not isinstance(chats, list):
-            return
+        chats = _fetch_waha_overview_for_contacts(session_name, headers, chat_ids)
     except Exception as e:
         print(f"Inbox sync skip: {e}")
+        return
+    if not chats:
         return
 
     dirty = False
@@ -860,31 +919,20 @@ def _sync_inbox_from_waha(user):
         if not isinstance(chat, dict):
             continue
         phone = _phone_from_waha_chat_id(chat.get("id") or chat.get("chatId"))
-        if not phone:
+        lead = _lead_for_synced_phone(phone, by_phone, by_tail)
+        if not lead:
             continue
         raw_last = chat.get("lastMessage")
         last_message = raw_last if isinstance(raw_last, dict) else {}
         body = _waha_last_message_text(last_message)
         ts_val = last_message.get("timestamp") or chat.get("conversationTimestamp") or chat.get("timestamp")
         from_me = bool(last_message.get("fromMe"))
-        name = (chat.get("name") or "").strip() or phone
         unread = chat.get("unreadCount")
         nested_chat = chat.get("_chat") if isinstance(chat.get("_chat"), dict) else {}
         if unread is None:
             unread = nested_chat.get("unreadCount")
         if unread is None:
             unread = chat.get("unread")
-
-        lead = Lead.query.filter_by(phone=phone, user_id=user.id).first()
-        if not lead:
-            if not last_message and ts_val is None:
-                continue
-            lead = Lead(phone=phone, name=name[:100], user_id=user.id, stage="New", unread_count=0)
-            db.session.add(lead)
-            dirty = True
-        elif name and name != phone and (not lead.name or lead.name in ("Unknown", lead.phone)):
-            lead.name = name[:100]
-            dirty = True
 
         stored_new_incoming = False
         if last_message:
@@ -899,23 +947,24 @@ def _sync_inbox_from_waha(user):
             else:
                 timestamp = datetime.utcnow()
             display = body or "Attachment"
+            saved_phone = lead.phone
             if from_me:
                 recent_out = Message.query.filter(
-                    Message.phone == phone,
+                    Message.phone == saved_phone,
                     Message.is_from_me == True,
                     Message.user_id == user.id,
                     Message.content == display,
                     Message.timestamp >= timestamp - timedelta(seconds=30),
                 ).first()
-                if not recent_out and not _message_already_stored(user.id, phone, display, timestamp, True):
+                if not recent_out and not _message_already_stored(user.id, saved_phone, display, timestamp, True):
                     db.session.add(Message(
-                        phone=phone, content=display, is_from_me=True,
+                        phone=saved_phone, content=display, is_from_me=True,
                         user_id=user.id, timestamp=timestamp,
                     ))
                     dirty = True
-            elif not _message_already_stored(user.id, phone, display, timestamp, False):
+            elif not _message_already_stored(user.id, saved_phone, display, timestamp, False):
                 db.session.add(Message(
-                    phone=phone, content=display, is_from_me=False,
+                    phone=saved_phone, content=display, is_from_me=False,
                     user_id=user.id, timestamp=timestamp,
                 ))
                 stored_new_incoming = True
@@ -927,7 +976,7 @@ def _sync_inbox_from_waha(user):
                 count = max(0, int(unread))
             except (TypeError, ValueError):
                 count = None
-        recently_read = now - _recently_read_at.get((user.id, phone), 0) < 15
+        recently_read = now - _recently_read_at.get((user.id, lead.phone), 0) < 15
         current = getattr(lead, "unread_count", 0) or 0
         if count is not None:
             if count == 0 or not recently_read:
