@@ -4,6 +4,7 @@ node_modules/
 __pycache__/
 venv/
 backend/instance/
+backend/media_store/
 *.db
 frontend/dist/
 .DS_Store

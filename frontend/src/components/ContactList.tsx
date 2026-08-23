@@ -12,7 +12,6 @@ import {
   Square,
   Edit3,
   Trash2,
-  MessageCircle,
   XCircle,
   Filter,
   MoreVertical,
@@ -195,14 +194,6 @@ export function ContactList({
     const isNewTop = prevTop !== null && newTopPhone !== prevTop;
     const notViewingThisChat = selectedContact !== newTopPhone;
     if (isNewTop && notViewingThisChat) {
-      const contact = filteredContacts[0];
-      const name = contact.name || "Unknown";
-      const preview = contact.last_message_preview?.trim() || "New message";
-      toast.success(name, {
-        description: preview.length > 40 ? preview.slice(0, 40) + "…" : preview,
-        icon: <MessageCircle className="h-4 w-4 text-primary" />,
-        duration: 4000,
-      });
       setHighlightPhone(newTopPhone);
       if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
       highlightTimeoutRef.current = setTimeout(() => {

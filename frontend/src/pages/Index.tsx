@@ -71,12 +71,6 @@ const Index = () => {
     },
   });
 
-  const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats"],
-    queryFn: () => api.dashboard.getStats(),
-    refetchInterval: 10000,
-  });
-
   const { data: wahaStatus } = useQuery({
     queryKey: ["waha-status"],
     queryFn: api.dashboard.getStatus,
@@ -145,12 +139,18 @@ const Index = () => {
           <AppTopbar
             search={search}
             onSearchChange={setSearch}
-            notificationCount={stats?.pending_schedules ?? 0}
             user={currentUser?.user}
             isAdmin={isAdmin}
             onLogout={handleLogout}
             onOpenOperators={isAdmin ? () => handleNavigate("team") : undefined}
             onOpenSettings={() => handleNavigate("settings")}
+            onOpenChat={(phone) => {
+              closeAllModals();
+              setActiveNav("inbox");
+              setSelectedContact(phone);
+            }}
+            onOpenScheduler={() => handleNavigate("scheduler")}
+            selectedContact={selectedContact}
             trailing={
               <button
                 type="button"

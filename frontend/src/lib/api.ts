@@ -12,9 +12,14 @@ export interface Template {
 }
 
 export interface Message {
+  id?: number;
   content: string;
   is_from_me: boolean;
   time: string;
+  media_kind?: "image" | "video" | "audio" | "document" | "sticker" | null;
+  media_url?: string | null;
+  media_name?: string | null;
+  media_mime?: string | null;
 }
 
 export interface Contact {
@@ -93,6 +98,7 @@ export interface User {
 export interface AppPreferences {
   default_country_code: string;
   notify_pending_schedules: boolean;
+  notify_new_messages: boolean;
   enter_to_send: boolean;
 }
 

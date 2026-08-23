@@ -466,9 +466,27 @@ export function SettingsView({
               <h3 className="text-sm font-semibold tracking-tight">Alerts</h3>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
+                  <p className="text-sm font-medium">New message alerts</p>
+                  <p className="text-xs text-muted-foreground">
+                    Toast and desktop notice when a saved contact sends a message.
+                  </p>
+                </div>
+                <Switch
+                  checked={prefs.notify_new_messages}
+                  disabled={prefsMutation.isPending}
+                  onCheckedChange={(checked) => {
+                    if (checked && typeof Notification !== "undefined" && Notification.permission === "default") {
+                      void Notification.requestPermission();
+                    }
+                    prefsMutation.mutate({ notify_new_messages: checked });
+                  }}
+                />
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                   <p className="text-sm font-medium">Pending schedule badge</p>
                   <p className="text-xs text-muted-foreground">
-                    Show a dot on the bell when messages are waiting to send.
+                    Include queued sends in the bell.
                     {typeof stats?.pending_schedules === "number" ? ` ${stats.pending_schedules} pending now.` : ""}
                   </p>
                 </div>

@@ -12,13 +12,14 @@ import {
   X,
   FileImage,
   FileText,
+  FileVideo,
   Mic,
   CheckCheck,
   Copy,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { api } from "@/lib/api";
+import { api, Message } from "@/lib/api";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import {
@@ -40,6 +41,58 @@ const ATTACHMENT_ACCEPT = {
 } as const;
 
 const GROUP_MS = 5 * 60 * 1000;
+
+function isMediaPlaceholder(text?: string) {
+  const value = (text || "").trim().toLowerCase();
+  if (!value) return true;
+  return (
+    ["photo", "video", "voice message", "sticker", "attachment"].includes(value) ||
+    value.startsWith("🖼️") ||
+    value.startsWith("🎤") ||
+    value.startsWith("📎")
+  );
+}
+
+function ChatMedia({ msg, fromMe }: { msg: Message; fromMe: boolean }) {
+  if (!msg.media_url || !msg.media_kind) return null;
+  const src = msg.media_url.startsWith("http") ? msg.media_url : msg.media_url;
+  if (msg.media_kind === "image" || msg.media_kind === "sticker") {
+    return (
+      <a href={src} target="_blank" rel="noreferrer" className="-mx-0.5 mb-1 block">
+        <img
+          src={src}
+          alt={msg.media_name || "Image"}
+          className="max-h-72 max-w-full rounded-lg object-cover"
+        />
+      </a>
+    );
+  }
+  if (msg.media_kind === "video") {
+    return <video src={src} controls className="mb-1 max-h-72 w-full rounded-lg" />;
+  }
+  if (msg.media_kind === "audio") {
+    return <audio src={src} controls className="mb-1 w-full min-w-[180px] max-w-[240px]" />;
+  }
+  return (
+    <a
+      href={src}
+      download={msg.media_name || undefined}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "mb-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium",
+        fromMe ? "bg-white/15" : "bg-muted/70",
+      )}
+    >
+      {msg.media_mime?.includes("video") ? (
+        <FileVideo className="h-3.5 w-3.5 shrink-0" />
+      ) : (
+        <FileText className="h-3.5 w-3.5 shrink-0" />
+      )}
+      <span className="min-w-0 truncate">{msg.media_name || "Document"}</span>
+    </a>
+  );
+}
 
 interface ChatInterfaceProps {
   activeContact: string | null;
@@ -130,7 +183,7 @@ export function ChatInterface({
   const sendMediaMutation = useMutation({
     mutationFn: async ({ to, caption, file }: { to: string; caption: string; file: File }) => {
       const res = await api.chat.sendMedia(to, caption, file);
-      return res as { status?: string; message?: { content: string; is_from_me: boolean; time: string } };
+      return res as { status?: string; message?: Message };
     },
     onSuccess: (data, variables) => {
       setMessage("");
@@ -139,7 +192,7 @@ export function ChatInterface({
       const msg = data?.message;
       const contact = variables.to;
       if (msg && contact) {
-        queryClient.setQueryData<{ content: string; is_from_me: boolean; time: string }[]>(
+        queryClient.setQueryData<Message[]>(
           ["messages", contact],
           (old) => (old ? [...old, msg] : [msg]),
         );
@@ -382,7 +435,12 @@ export function ChatInterface({
                                   : "rounded-2xl rounded-l-md",
                             )}
                           >
-                            <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                            <ChatMedia msg={msg} fromMe={fromMe} />
+                            {msg.content?.trim() && !isMediaPlaceholder(msg.content) ? (
+                              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                            ) : !msg.media_url ? (
+                              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                            ) : null}
                             <span
                               className={cn(
                                 "mt-0.5 flex items-center justify-end gap-0.5 text-[10px] tabular-nums",

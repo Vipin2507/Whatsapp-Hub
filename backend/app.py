@@ -3,11 +3,14 @@ import re
 import json
 import base64
 import time
+import uuid
+import mimetypes
 import traceback
 import requests
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, send_file
+from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import OperationalError
 from sqlalchemy import text as sql_text
@@ -215,6 +218,11 @@ def sentry_dispatch_worker():
 # --- EXTERNAL SERVICES CONFIG ---
 WAHA_API = os.getenv("WAHA_API", "http://waha:3000")
 WAHA_KEY = os.getenv("WAHA_KEY", "MySecretWAHAKey")
+MEDIA_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "media_store")
+os.makedirs(MEDIA_ROOT, exist_ok=True)
+MEDIA_PLACEHOLDERS = {
+    "", "photo", "video", "voice message", "sticker", "attachment",
+}
 
 # --- HELPER: PHONE SANITIZER ---
 def sanitize_phone(phone):
@@ -275,6 +283,11 @@ class Message(db.Model):
     is_from_me = db.Column(db.Boolean)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    waha_id = db.Column(db.String(200))
+    media_kind = db.Column(db.String(20))
+    media_mime = db.Column(db.String(100))
+    media_name = db.Column(db.String(255))
+    media_path = db.Column(db.String(255))
 
 class Template(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -471,6 +484,7 @@ def toggle_ai():
 PREFS_DEFAULTS = {
     "default_country_code": "91",
     "notify_pending_schedules": True,
+    "notify_new_messages": True,
     "enter_to_send": True,
 }
 
@@ -547,6 +561,8 @@ def update_preferences():
             prefs["default_country_code"] = digits
     if "notify_pending_schedules" in data:
         prefs["notify_pending_schedules"] = bool(data.get("notify_pending_schedules"))
+    if "notify_new_messages" in data:
+        prefs["notify_new_messages"] = bool(data.get("notify_new_messages"))
     if "enter_to_send" in data:
         prefs["enter_to_send"] = bool(data.get("enter_to_send"))
     _ensure_settings_table()
@@ -747,11 +763,33 @@ def _ensure_lead_unread_column():
             print(f"Lead unread migration skip: {e}")
 
 
+def _ensure_message_media_columns():
+    """Add media columns to message if missing (existing DBs)."""
+    try:
+        with db.engine.connect() as conn:
+            for col, typ in [
+                ("waha_id", "VARCHAR(200)"),
+                ("media_kind", "VARCHAR(20)"),
+                ("media_mime", "VARCHAR(100)"),
+                ("media_name", "VARCHAR(255)"),
+                ("media_path", "VARCHAR(255)"),
+            ]:
+                try:
+                    conn.execute(sql_text(f"ALTER TABLE message ADD COLUMN {col} {typ}"))
+                    conn.commit()
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        raise
+    except Exception as e:
+        print(f"Message media migration skip: {e}")
+
+
 @app.before_request
 def _ensure_inbox_schema():
     if getattr(app, "_lead_unread_ready", False):
         return
     _ensure_lead_unread_column()
+    _ensure_message_media_columns()
     app._lead_unread_ready = True
 
 
@@ -1469,63 +1507,234 @@ scheduler.add_job(func=start_conversation_instances, trigger="interval", seconds
 scheduler.start()
 
 
+def _waha_message_id(raw):
+    mid = raw.get("id") if isinstance(raw, dict) else None
+    if isinstance(mid, dict):
+        mid = mid.get("_serialized") or mid.get("id")
+    return str(mid) if mid else None
+
+
+def _media_kind_from(mime, msg_type=""):
+    mime = (mime or "").lower()
+    msg_type = (msg_type or "").lower()
+    if msg_type == "sticker" or "sticker" in mime:
+        return "sticker"
+    if mime.startswith("image/") or msg_type == "image":
+        return "image"
+    if mime.startswith("video/") or msg_type == "video":
+        return "video"
+    if mime.startswith("audio/") or msg_type in ("audio", "ptt", "voice"):
+        return "audio"
+    if mime or msg_type in ("document", "file"):
+        return "document"
+    return None
+
+
+def _waha_media_info(raw):
+    if not isinstance(raw, dict):
+        return None
+    media = raw.get("media") if isinstance(raw.get("media"), dict) else {}
+    url = media.get("url") or raw.get("mediaUrl")
+    mime = media.get("mimetype") or raw.get("mimetype") or ""
+    filename = media.get("filename") or raw.get("filename") or ""
+    error = media.get("error")
+    has_media = bool(raw.get("hasMedia") or url or mime)
+    if not has_media or error:
+        return None
+    kind = _media_kind_from(mime, raw.get("type") or "")
+    if not kind and not url:
+        return None
+    return {"url": url, "mime": mime, "name": filename, "kind": kind or "document"}
+
+
+def _rewrite_waha_file_url(url):
+    if not url:
+        return url
+    try:
+        from urllib.parse import urlparse, urlunparse
+        parsed = urlparse(url)
+        if "/api/files" not in (parsed.path or ""):
+            return url
+        base = urlparse(WAHA_API)
+        return urlunparse((base.scheme or "http", base.netloc or parsed.netloc, parsed.path, "", parsed.query, ""))
+    except Exception:
+        return url
+
+
+def _store_media_bytes(user_id, raw_bytes, mime, filename):
+    if not raw_bytes:
+        return None
+    if len(raw_bytes) > 25 * 1024 * 1024:
+        return None
+    ext = ""
+    safe_name = secure_filename(filename or "")
+    if safe_name and "." in safe_name:
+        ext = os.path.splitext(safe_name)[1][:12]
+    if not ext and mime:
+        guessed = mimetypes.guess_extension(mime.split(";")[0].strip())
+        ext = guessed or ""
+    stored = f"{user_id}_{uuid.uuid4().hex}{ext}"
+    path = os.path.join(MEDIA_ROOT, stored)
+    with open(path, "wb") as fh:
+        fh.write(raw_bytes)
+    return stored
+
+
+def _download_waha_media(url, mime, filename, user_id):
+    fetch_url = _rewrite_waha_file_url(url)
+    if not fetch_url:
+        return None
+    try:
+        r = requests.get(fetch_url, headers={"X-Api-Key": WAHA_KEY}, timeout=20)
+        if not r.ok or not r.content:
+            return None
+        return _store_media_bytes(user_id, r.content, mime or r.headers.get("Content-Type"), filename)
+    except Exception as e:
+        print(f"Media download skip: {e}")
+        return None
+
+
+def _apply_media_to_message(msg, media_info, user_id):
+    if not media_info or getattr(msg, "media_path", None):
+        return False
+    stored = _download_waha_media(media_info.get("url"), media_info.get("mime"), media_info.get("name"), user_id)
+    if not stored:
+        return False
+    msg.media_path = stored
+    msg.media_kind = media_info.get("kind") or "document"
+    msg.media_mime = (media_info.get("mime") or "")[:100]
+    msg.media_name = (media_info.get("name") or "")[:255]
+    return True
+
+
+def _message_public_dict(m):
+    has_file = bool(getattr(m, "media_path", None))
+    return {
+        "id": m.id,
+        "content": m.content,
+        "is_from_me": m.is_from_me,
+        "time": m.timestamp.isoformat() + "Z" if m.timestamp else "",
+        "media_kind": getattr(m, "media_kind", None) if has_file else None,
+        "media_url": f"/api/media/{m.id}" if has_file else None,
+        "media_name": getattr(m, "media_name", None) if has_file else None,
+        "media_mime": getattr(m, "media_mime", None) if has_file else None,
+    }
+
+
+@app.route('/api/media/<int:message_id>', methods=['GET'])
+@login_required
+def get_message_media(message_id):
+    _ensure_message_media_columns()
+    msg = Message.query.filter_by(id=message_id, user_id=current_user.id).first()
+    stored = getattr(msg, "media_path", None) if msg else None
+    if not msg or not stored:
+        return jsonify({"status": "error", "message": "Not found"}), 404
+    path = os.path.join(MEDIA_ROOT, os.path.basename(stored))
+    if not os.path.isfile(path):
+        return jsonify({"status": "error", "message": "File missing"}), 404
+    return send_file(
+        path,
+        mimetype=getattr(msg, "media_mime", None) or "application/octet-stream",
+        download_name=getattr(msg, "media_name", None) or os.path.basename(path),
+        as_attachment=False,
+    )
+
+
 @app.route('/api/conversation/<phone>', methods=['GET'])
 @login_required
 def get_messages(phone):
+    _ensure_message_media_columns()
     try:
         chat_id = f"{phone}@c.us"
         session_name = get_waha_default_session(current_user.id)
-        url = f"{WAHA_API}/api/{session_name}/chats/{chat_id}/messages?limit=20"
-        response = requests.get(url, headers={"X-Api-Key": WAHA_KEY}, timeout=5)
+        url = f"{WAHA_API}/api/{session_name}/chats/{chat_id}/messages?limit=30&downloadMedia=true"
+        response = requests.get(url, headers={"X-Api-Key": WAHA_KEY}, timeout=20)
         if response.status_code == 200:
             raw_msgs = response.json()
-            # Dedupe WAHA response: same message can appear multiple times in one response
             seen_waha = set()
             incoming_msgs = []
             for m in raw_msgs:
                 ts = m.get('timestamp')
-                key = (m.get('body', ''), round(float(ts)) if ts is not None else 0, m.get('fromMe', False))
+                mid = _waha_message_id(m)
+                key = (mid or m.get('body', ''), round(float(ts)) if ts is not None else 0, m.get('fromMe', False))
                 if key in seen_waha:
                     continue
                 seen_waha.add(key)
                 incoming_msgs.append(m)
 
             for m in incoming_msgs:
-                body = m.get('body', '')
+                body = (m.get('body') or m.get('caption') or "").strip()
                 ts_val = m.get('timestamp')
                 timestamp = datetime.utcfromtimestamp(ts_val) if ts_val is not None else datetime.utcnow()
                 is_from_me = m.get('fromMe', False)
-                # Never add our own sent messages from WAHA - we already store them in send_msg
-                if is_from_me:
+                media_info = _waha_media_info(m)
+                waha_id = _waha_message_id(m)
+                if is_from_me and not media_info:
                     continue
-                # Incoming only: match by content + timestamp within 2 sec (float rounding)
                 ts_lo = timestamp - timedelta(seconds=2)
                 ts_hi = timestamp + timedelta(seconds=2)
-                exists = Message.query.filter(
-                    Message.phone == phone,
-                    Message.content == body,
-                    Message.is_from_me == False,
-                    Message.user_id == current_user.id,
-                    Message.timestamp >= ts_lo,
-                    Message.timestamp <= ts_hi,
-                ).first()
+                exists = None
+                if waha_id:
+                    exists = Message.query.filter_by(waha_id=waha_id, user_id=current_user.id).first()
                 if not exists:
-                    db.session.add(Message(phone=phone, content=body, is_from_me=is_from_me, user_id=current_user.id, timestamp=timestamp))
+                    exists = Message.query.filter(
+                        Message.phone == phone,
+                        Message.content == body,
+                        Message.is_from_me == is_from_me,
+                        Message.user_id == current_user.id,
+                        Message.timestamp >= ts_lo,
+                        Message.timestamp <= ts_hi,
+                    ).first()
+                if not exists and media_info:
+                    nearby = Message.query.filter(
+                        Message.phone == phone,
+                        Message.is_from_me == is_from_me,
+                        Message.user_id == current_user.id,
+                        Message.timestamp >= ts_lo,
+                        Message.timestamp <= ts_hi,
+                    ).all()
+                    for candidate in nearby:
+                        text = (candidate.content or "").strip().lower()
+                        if text in MEDIA_PLACEHOLDERS or text.startswith("🖼️") or text.startswith("🎤") or text.startswith("📎"):
+                            exists = candidate
+                            break
+                if exists:
+                    changed = False
+                    if waha_id and not getattr(exists, "waha_id", None):
+                        exists.waha_id = waha_id
+                        changed = True
+                    if media_info and _apply_media_to_message(exists, media_info, current_user.id):
+                        if not (exists.content or "").strip() and body:
+                            exists.content = body
+                        changed = True
+                    if changed:
+                        db.session.add(exists)
+                    continue
+                msg = Message(
+                    phone=phone,
+                    content=body,
+                    is_from_me=is_from_me,
+                    user_id=current_user.id,
+                    timestamp=timestamp,
+                    waha_id=waha_id,
+                )
+                if media_info:
+                    _apply_media_to_message(msg, media_info, current_user.id)
+                db.session.add(msg)
             db.session.commit()
     except Exception as e: print(f"WAHA Sync Warning: {e}")
 
     _mark_chat_read(current_user, phone)
 
     msgs = Message.query.filter_by(phone=phone, user_id=current_user.id).order_by(Message.timestamp.asc()).all()
-    # Dedupe response so same message never appears twice (content + time + is_from_me)
     seen = set()
     out = []
     for m in msgs:
-        key = (m.content, m.timestamp.isoformat() if m.timestamp else "", m.is_from_me)
+        key = (m.content, m.timestamp.isoformat() if m.timestamp else "", m.is_from_me, getattr(m, "media_path", None) or "")
         if key in seen:
             continue
         seen.add(key)
-        out.append({'content': m.content, 'is_from_me': m.is_from_me, 'time': m.timestamp.isoformat() + 'Z' if m.timestamp else ''})
+        out.append(_message_public_dict(m))
     return jsonify(out)
 
 @app.route('/api/send', methods=['POST'])
@@ -1593,20 +1802,24 @@ def send_media():
         r = requests.post(endpoint, json=payload, headers=headers, timeout=30)
         if r.status_code not in (200, 201):
             return jsonify({"status": "error", "message": r.text or "WAHA rejected media"}), 400
-        # Store in chat history so it appears in the conversation
-        if mimetype.startswith('image/'):
-            display_content = caption or f"🖼️ Image: {filename}"
-        elif mimetype.startswith('audio/'):
-            display_content = caption or f"🎤 Audio: {filename}"
-        else:
-            display_content = caption or f"📎 Document: {filename}"
-        msg = Message(phone=phone, content=display_content, is_from_me=True, user_id=current_user.id)
+        _ensure_message_media_columns()
+        stored = _store_media_bytes(current_user.id, file_data, mimetype, filename)
+        kind = _media_kind_from(mimetype, "")
+        msg = Message(
+            phone=phone,
+            content=caption or "",
+            is_from_me=True,
+            user_id=current_user.id,
+            media_kind=kind,
+            media_mime=mimetype[:100],
+            media_name=filename[:255],
+            media_path=stored,
+        )
         db.session.add(msg)
         db.session.commit()
-        time_str = msg.timestamp.isoformat() + "Z" if msg.timestamp else ""
         return jsonify({
             "status": "success",
-            "message": {"content": msg.content, "is_from_me": True, "time": time_str},
+            "message": _message_public_dict(msg),
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -2730,6 +2943,7 @@ if __name__ == "__main__":
         _ensure_conversation_tables()
         _ensure_settings_table()
         _ensure_lead_unread_column()
+        _ensure_message_media_columns()
         if not User.query.filter_by(username='admin').first():
             admin_pw = bcrypt.generate_password_hash('buildesk').decode('utf-8')
             db.session.add(User(username='admin', password=admin_pw))

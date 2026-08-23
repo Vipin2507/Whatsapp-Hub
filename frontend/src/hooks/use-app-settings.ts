@@ -4,6 +4,7 @@ import { api, type AppPreferences } from "@/lib/api";
 export const DEFAULT_PREFERENCES: AppPreferences = {
   default_country_code: "91",
   notify_pending_schedules: true,
+  notify_new_messages: true,
   enter_to_send: true,
 };
 
