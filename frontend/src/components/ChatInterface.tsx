@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import {
   Send,
   Paperclip,
@@ -119,6 +119,7 @@ export function ChatInterface({
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const pinnedContactRef = useRef<string | null>(null);
   const [fileAccept, setFileAccept] = useState<string>(ATTACHMENT_ACCEPT.document);
   const queryClient = useQueryClient();
   const prefs = useAppPreferences();
@@ -208,35 +209,52 @@ export function ChatInterface({
     onError: (e: Error) => toast.error(e.message || "Failed to send attachment"),
   });
 
-  const scrollToLatest = (behavior: ScrollBehavior = "auto") => {
+  const scrollToLatest = useCallback(() => {
     const el = scrollRef.current;
+    const end = bottomRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-  };
+    if (end) {
+      const delta = end.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom;
+      if (Math.abs(delta) > 1) el.scrollTop += delta;
+      return;
+    }
+    el.scrollTop = el.scrollHeight;
+  }, []);
 
   useLayoutEffect(() => {
     stickToBottomRef.current = true;
-    scrollToLatest("auto");
+    pinnedContactRef.current = null;
   }, [activeContact]);
 
   useLayoutEffect(() => {
-    if (!stickToBottomRef.current) return;
-    scrollToLatest("auto");
-  }, [messages, isLoading]);
+    if (!activeContact || !stickToBottomRef.current) return;
+    scrollToLatest();
+    if (messages.length > 0) pinnedContactRef.current = activeContact;
+  }, [activeContact, messages, isLoading, scrollToLatest]);
 
   useEffect(() => {
-    if (!stickToBottomRef.current) return;
+    if (!activeContact || !stickToBottomRef.current) return;
+    const timers = [0, 50, 160, 320].map((ms) => window.setTimeout(scrollToLatest, ms));
     const frame = requestAnimationFrame(() => {
-      requestAnimationFrame(() => scrollToLatest("auto"));
+      requestAnimationFrame(scrollToLatest);
     });
-    return () => cancelAnimationFrame(frame);
-  }, [messages, activeContact, isLoading]);
+    return () => {
+      timers.forEach((id) => window.clearTimeout(id));
+      cancelAnimationFrame(frame);
+    };
+  }, [activeContact, messages, isLoading, scrollToLatest]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const onScroll = () => {
-      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (pinnedContactRef.current !== activeContact) return;
+      const end = bottomRef.current;
+      if (!end) {
+        stickToBottomRef.current = true;
+        return;
+      }
+      const distance = Math.abs(end.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom);
       stickToBottomRef.current = distance < 96;
     };
     el.addEventListener("scroll", onScroll, { passive: true });
@@ -246,13 +264,26 @@ export function ChatInterface({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const onLoad = () => {
-      if (stickToBottomRef.current) scrollToLatest("auto");
+    const keepLatest = () => {
+      if (stickToBottomRef.current) scrollToLatest();
     };
+    const observer = new ResizeObserver(keepLatest);
+    observer.observe(el);
+    const inner = el.firstElementChild;
+    if (inner) observer.observe(inner);
     const media = el.querySelectorAll("img, video");
-    media.forEach((node) => node.addEventListener("load", onLoad));
-    return () => media.forEach((node) => node.removeEventListener("load", onLoad));
-  }, [messages, activeContact]);
+    media.forEach((node) => {
+      node.addEventListener("load", keepLatest);
+      node.addEventListener("loadeddata", keepLatest);
+    });
+    return () => {
+      observer.disconnect();
+      media.forEach((node) => {
+        node.removeEventListener("load", keepLatest);
+        node.removeEventListener("loadeddata", keepLatest);
+      });
+    };
+  }, [messages, activeContact, scrollToLatest]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -354,10 +385,10 @@ export function ChatInterface({
         ) : (
           <motion.div
             key={activeContact}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.28, ease: EASE }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: EASE }}
             className="flex min-h-0 flex-1 flex-col"
           >
             <header className="flex h-14 shrink-0 items-center gap-1.5 border-b bg-card/80 px-2 backdrop-blur sm:px-3">
@@ -408,7 +439,7 @@ export function ChatInterface({
               </DropdownMenu>
             </header>
 
-            <div ref={scrollRef} className="chat-scroll relative min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5">
+            <div className="relative min-h-0 flex-1">
               <div
                 className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-20"
                 style={{
@@ -417,7 +448,12 @@ export function ChatInterface({
                   backgroundSize: "14px 14px",
                 }}
               />
-              <div className="relative space-y-0.5">
+              <div
+                ref={scrollRef}
+                className="chat-scroll absolute inset-0 overflow-x-hidden overflow-y-auto px-3 py-3 sm:px-5"
+                style={{ overflowAnchor: "none" }}
+              >
+              <div className="relative flex min-h-full flex-col justify-end space-y-0.5">
                 {isLoading && messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-2 pt-16">
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -447,7 +483,6 @@ export function ChatInterface({
                       Math.abs(new Date(next.time).getTime() - new Date(msg.time).getTime()) < GROUP_MS;
                     const isLastInGroup = !nextSame;
                     const fromMe = msg.is_from_me;
-                    const reveal = Math.max(0, messages.length - 12);
 
                     return (
                       <div key={`${msg.time}-${index}`}>
@@ -458,10 +493,7 @@ export function ChatInterface({
                             </span>
                           </div>
                         )}
-                        <motion.div
-                          initial={index >= reveal ? { opacity: 0, y: 4 } : false}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.22, ease: EASE }}
+                        <div
                           className={cn("flex", fromMe ? "justify-end" : "justify-start", prevSame ? "mt-0.5" : "mt-2")}
                         >
                           <div
@@ -495,12 +527,13 @@ export function ChatInterface({
                               {fromMe ? <CheckCheck className="h-3 w-3" /> : null}
                             </span>
                           </div>
-                        </motion.div>
+                        </div>
                       </div>
                     );
                   })
                 )}
-                <div ref={bottomRef} />
+                <div ref={bottomRef} className="h-px w-full shrink-0" />
+              </div>
               </div>
             </div>
 
