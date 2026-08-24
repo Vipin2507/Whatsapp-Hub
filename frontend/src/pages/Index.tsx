@@ -198,12 +198,17 @@ const Index = () => {
                     <PageWrap>
                       <PageHeader
                         title="Analytics"
-                        subtitle="Workload, mix, and delivery health"
+                        subtitle="Inbox, pipeline, and delivery in this period"
                       />
                       <DashboardAnalytics
                         onOpenContacts={() => handleNavigate("contacts")}
                         onOpenScheduler={() => handleNavigate("scheduler")}
                         onOpenLists={() => handleNavigate("lists")}
+                        onOpenInbox={(phone) => {
+                          closeAllModals();
+                          setActiveNav("inbox");
+                          if (phone) setSelectedContact(phone);
+                        }}
                       />
                     </PageWrap>
                   </motion.div>

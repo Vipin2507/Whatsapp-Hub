@@ -61,16 +61,54 @@ export interface Schedule {
   recurrence_config?: string | RecurrenceConfig | null;
 }
 
+export interface AnalyticsCompare {
+  current: number;
+  previous: number;
+  delta_pct: number;
+}
+
+export interface AnalyticsChat {
+  phone: string;
+  name: string;
+  messages: number;
+  unread: number;
+  stage?: string;
+  last_at?: string | null;
+}
+
 export interface DashboardStats {
   total_leads: number;
   total_msgs: number;
   total_segments: number;
   pending_schedules: number;
+  sent_schedules?: number;
+  failed_schedules?: number;
   recent_leads?: number;
   recent_messages?: number;
+  inbound_messages?: number;
+  outbound_messages?: number;
+  unread_total?: number;
+  unread_chats?: number;
+  reply_rate?: number | null;
+  media_messages?: number;
   stage_distribution?: Record<string, number>;
-  messages_timeline?: Array<{ date: string; count: number }>;
+  assigned_distribution?: Record<string, string | number>;
+  schedule_status?: Record<string, number>;
+  messages_timeline?: Array<{
+    date: string;
+    count: number;
+    inbound?: number;
+    outbound?: number;
+    leads?: number;
+  }>;
   leads_by_stage?: Record<string, number>;
+  top_chats?: AnalyticsChat[];
+  compare?: {
+    leads?: AnalyticsCompare;
+    messages?: AnalyticsCompare;
+    inbound?: AnalyticsCompare;
+    outbound?: AnalyticsCompare;
+  };
   date_from?: string;
   date_to?: string;
 }

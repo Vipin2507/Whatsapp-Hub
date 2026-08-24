@@ -23,6 +23,7 @@ interface KpiCardProps {
   active?: boolean;
   onClick?: () => void;
   hint?: string;
+  delta?: number | null;
   className?: string;
 }
 
@@ -34,6 +35,7 @@ export function KpiCard({
   active,
   onClick,
   hint,
+  delta,
   className,
 }: KpiCardProps) {
   const clickable = Boolean(onClick);
@@ -61,7 +63,15 @@ export function KpiCard({
         <span className="block truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </span>
-        <CountUp value={value} className="block text-base font-semibold tabular-nums leading-tight" />
+        <span className="flex items-baseline gap-1.5">
+          <CountUp value={value} className="block text-base font-semibold tabular-nums leading-tight" />
+          {typeof delta === "number" ? (
+            <span className={cn("text-[10px] font-semibold tabular-nums", delta >= 0 ? "text-success" : "text-destructive")}>
+              {delta > 0 ? "+" : ""}
+              {delta}%
+            </span>
+          ) : null}
+        </span>
         {hint ? <span className="block truncate text-[10px] text-muted-foreground">{hint}</span> : null}
       </span>
       {clickable ? <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" /> : null}
