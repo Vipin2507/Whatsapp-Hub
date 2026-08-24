@@ -663,141 +663,195 @@ def _count_map(rows):
     return out
 
 
+def _day_key(value):
+    if value is None:
+        return ""
+    text = value.isoformat() if hasattr(value, "isoformat") else str(value)
+    return text[:10]
+
+
 # --- CRM & CONTACTS API ---
 @app.route('/api/dashboard/stats', methods=['GET'])
 @login_required
 def get_stats():
-    from sqlalchemy import func, case
-    from datetime import datetime, timedelta
+    try:
+        return _dashboard_stats_payload()
+    except Exception as e:
+        print(f"Dashboard stats error: {e}")
+        traceback.print_exc()
+        uid = current_user.id
+        return jsonify({
+            "total_leads": Lead.query.filter_by(user_id=uid).count(),
+            "total_msgs": Message.query.filter_by(user_id=uid).count(),
+            "total_segments": List.query.filter_by(user_id=uid).count(),
+            "pending_schedules": ScheduledMessage.query.filter_by(user_id=uid, status="PENDING").count(),
+            "sent_schedules": 0,
+            "failed_schedules": 0,
+            "recent_leads": 0,
+            "recent_messages": 0,
+            "inbound_messages": 0,
+            "outbound_messages": 0,
+            "unread_total": 0,
+            "unread_chats": 0,
+            "reply_rate": None,
+            "media_messages": 0,
+            "stage_distribution": {},
+            "leads_by_stage": {},
+            "assigned_distribution": {},
+            "schedule_status": {},
+            "messages_timeline": [],
+            "top_chats": [],
+            "compare": {},
+        })
 
-    _ensure_lead_unread_column()
-    _ensure_message_media_columns()
+
+def _dashboard_stats_payload():
+    from sqlalchemy import func
+    from datetime import datetime, timedelta
 
     days_param = request.args.get('days', type=int)
     date_from_param = request.args.get('date_from')
     date_to_param = request.args.get('date_to')
     stage_filter = request.args.get('stage', '').strip() or None
+    uid = current_user.id
 
     now = datetime.utcnow()
     if date_from_param and date_to_param:
         try:
-            start_dt = datetime.fromisoformat(date_from_param.replace('Z', '')).replace(hour=0, minute=0, second=0, microsecond=0)
-            end_dt = datetime.fromisoformat(date_to_param.replace('Z', '')).replace(hour=23, minute=59, second=59, microsecond=0)
-            if start_dt > end_dt:
-                start_dt, end_dt = end_dt.replace(hour=0, minute=0, second=0, microsecond=0), start_dt.replace(hour=23, minute=59, second=59)
-            range_start = start_dt
-            range_end = min(end_dt, now)
+            start_dt = datetime.fromisoformat(date_from_param.replace('Z', ''))
+            end_dt = datetime.fromisoformat(date_to_param.replace('Z', ''))
+            range_start = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            range_end = end_dt.replace(hour=23, minute=59, second=59, microsecond=0)
+            if range_start > range_end:
+                range_start, range_end = range_end.replace(hour=0, minute=0, second=0, microsecond=0), range_start.replace(hour=23, minute=59, second=59)
+            range_end = min(range_end, now)
         except (ValueError, TypeError):
             range_start = now - timedelta(days=7)
             range_end = now
     else:
         days = days_param if days_param in (1, 7, 14, 30, 90) else 7
-        if days == 1:
-            range_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        else:
-            range_start = now - timedelta(days=days)
+        range_start = now.replace(hour=0, minute=0, second=0, microsecond=0) if days == 1 else now - timedelta(days=days)
         range_end = now
 
     span = max(range_end - range_start, timedelta(days=1))
-    prev_end = range_start
     prev_start = range_start - span
+    range_start_d = range_start.date()
+    range_end_d = range_end.date()
+    prev_start_d = prev_start.date()
 
-    lead_base = Lead.query.filter_by(user_id=current_user.id)
+    lead_filters = [Lead.user_id == uid]
     if stage_filter:
-        lead_base = lead_base.filter(Lead.stage == stage_filter)
+        lead_filters.append(Lead.stage == stage_filter)
 
-    msg_base = Message.query.filter(Message.user_id == current_user.id)
+    stage_phones = None
     if stage_filter:
-        stage_phones = db.session.query(Lead.phone).filter(
-            Lead.user_id == current_user.id, Lead.stage == stage_filter
-        )
-        msg_base = msg_base.filter(Message.phone.in_(stage_phones))
+        stage_phones = [row[0] for row in db.session.query(Lead.phone).filter(*lead_filters).all() if row[0]]
 
-    period_msgs = msg_base.filter(Message.timestamp >= range_start, Message.timestamp <= range_end)
-    prev_msgs = msg_base.filter(Message.timestamp >= prev_start, Message.timestamp < prev_end)
+    total_leads = db.session.query(func.count(Lead.id)).filter(*lead_filters).scalar() or 0
+    total_segments = db.session.query(func.count(List.id)).filter(List.user_id == uid).scalar() or 0
 
-    total_leads = lead_base.count()
-    total_msgs = msg_base.count()
-    total_segments = List.query.filter_by(user_id=current_user.id).count()
-    pending_schedules = ScheduledMessage.query.filter_by(user_id=current_user.id, status='PENDING').count()
-    sent_schedules = ScheduledMessage.query.filter_by(user_id=current_user.id, status='SENT').count()
-    failed_schedules = ScheduledMessage.query.filter_by(user_id=current_user.id, status='FAILED').count()
-
-    stage_counts = db.session.query(Lead.stage, func.count(Lead.id)).filter(
-        Lead.user_id == current_user.id
-    ).group_by(Lead.stage).all()
-    stage_distribution = {stage or 'New': count for stage, count in stage_counts}
-
-    assigned_counts = db.session.query(Lead.assigned_to, func.count(Lead.id)).filter(
-        Lead.user_id == current_user.id
+    stage_distribution = {
+        (stage or "New"): count
+        for stage, count in db.session.query(Lead.stage, func.count(Lead.id)).filter(Lead.user_id == uid).group_by(Lead.stage).all()
+    }
+    assigned_distribution = _count_map(
+        db.session.query(Lead.assigned_to, func.count(Lead.id)).filter(*lead_filters).group_by(Lead.assigned_to).all()
     )
-    if stage_filter:
-        assigned_counts = assigned_counts.filter(Lead.stage == stage_filter)
-    assigned_distribution = _count_map(assigned_counts.group_by(Lead.assigned_to).all())
 
-    recent_leads = lead_base.filter(Lead.date_added >= range_start, Lead.date_added <= range_end).count()
-    prev_leads = lead_base.filter(Lead.date_added >= prev_start, Lead.date_added < prev_end).count()
-    recent_messages = period_msgs.count()
-    prev_messages = prev_msgs.count()
+    unread_total = 0
+    unread_chats = 0
+    try:
+        unread_total = int(db.session.query(func.coalesce(func.sum(Lead.unread_count), 0)).filter(*lead_filters).scalar() or 0)
+        unread_chats = db.session.query(func.count(Lead.id)).filter(*lead_filters, Lead.unread_count > 0).scalar() or 0
+    except Exception:
+        pass
 
-    inbound_messages = period_msgs.filter(Message.is_from_me == False).count()
-    outbound_messages = period_msgs.filter(Message.is_from_me == True).count()
-    prev_inbound = prev_msgs.filter(Message.is_from_me == False).count()
-    prev_outbound = prev_msgs.filter(Message.is_from_me == True).count()
+    schedule_status = {
+        (status or "PENDING"): count
+        for status, count in db.session.query(ScheduledMessage.status, func.count(ScheduledMessage.id)).filter(
+            ScheduledMessage.user_id == uid
+        ).group_by(ScheduledMessage.status).all()
+    }
+    pending_schedules = schedule_status.get("PENDING", 0)
+    sent_schedules = schedule_status.get("SENT", 0)
+    failed_schedules = schedule_status.get("FAILED", 0)
+
+    msg_filters = [Message.user_id == uid]
+    if stage_phones is not None:
+        msg_filters.append(Message.phone.in_(stage_phones or [""]))
+
+    total_msgs = db.session.query(func.count(Message.id)).filter(*msg_filters).scalar() or 0
+
+    recent_leads = 0
+    prev_leads = 0
+    lead_days = {}
+    for raw_day, count in db.session.query(func.date(Lead.date_added), func.count(Lead.id)).filter(
+        *lead_filters, Lead.date_added >= prev_start, Lead.date_added <= range_end
+    ).group_by(func.date(Lead.date_added)).all():
+        key = _day_key(raw_day)
+        if not key:
+            continue
+        try:
+            day = datetime.strptime(key, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if range_start_d <= day <= range_end_d:
+            recent_leads += count
+            lead_days[key] = count
+        elif prev_start_d <= day < range_start_d:
+            prev_leads += count
+
+    inbound_messages = outbound_messages = prev_inbound = prev_outbound = 0
+    media_messages = 0
+    day_counts = {}
+    if stage_phones is None or stage_phones:
+        for raw_day, from_me, count in db.session.query(
+            func.date(Message.timestamp), Message.is_from_me, func.count(Message.id)
+        ).filter(
+            *msg_filters, Message.timestamp >= prev_start, Message.timestamp <= range_end
+        ).group_by(func.date(Message.timestamp), Message.is_from_me).all():
+            key = _day_key(raw_day)
+            if not key:
+                continue
+            try:
+                day = datetime.strptime(key, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            outgoing = bool(from_me)
+            in_current = range_start_d <= day <= range_end_d
+            in_prev = prev_start_d <= day < range_start_d
+            if in_current:
+                bucket = day_counts.setdefault(key, {"inbound": 0, "outbound": 0})
+                if outgoing:
+                    bucket["outbound"] += count
+                    outbound_messages += count
+                else:
+                    bucket["inbound"] += count
+                    inbound_messages += count
+            elif in_prev:
+                if outgoing:
+                    prev_outbound += count
+                else:
+                    prev_inbound += count
+
+        try:
+            media_messages = db.session.query(func.count(Message.id)).filter(
+                *msg_filters,
+                Message.timestamp >= range_start,
+                Message.timestamp <= range_end,
+                Message.media_path.isnot(None),
+                Message.media_path != "",
+            ).scalar() or 0
+        except Exception:
+            media_messages = 0
+
+    recent_messages = inbound_messages + outbound_messages
+    prev_messages = prev_inbound + prev_outbound
     reply_rate = round((outbound_messages / inbound_messages) * 100) if inbound_messages else None
 
-    try:
-        media_messages = period_msgs.filter(
-            Message.media_kind.isnot(None), Message.media_kind != ""
-        ).count()
-    except Exception:
-        media_messages = 0
-
-    try:
-        unread_total = db.session.query(func.coalesce(func.sum(Lead.unread_count), 0)).filter(
-            Lead.user_id == current_user.id
-        )
-        if stage_filter:
-            unread_total = unread_total.filter(Lead.stage == stage_filter)
-        unread_total = int(unread_total.scalar() or 0)
-        unread_chats = lead_base.filter(func.coalesce(Lead.unread_count, 0) > 0).count()
-    except Exception:
-        unread_total = 0
-        unread_chats = 0
-
-    schedule_rows = db.session.query(ScheduledMessage.status, func.count(ScheduledMessage.id)).filter(
-        ScheduledMessage.user_id == current_user.id
-    ).group_by(ScheduledMessage.status).all()
-    schedule_status = {status or "PENDING": count for status, count in schedule_rows}
-
-    day_counts = {}
-    for day, inbound, outbound in db.session.query(
-        func.date(Message.timestamp),
-        func.sum(case([(Message.is_from_me == False, 1)], else_=0)),
-        func.sum(case([(Message.is_from_me == True, 1)], else_=0)),
-    ).filter(
-        Message.user_id == current_user.id,
-        Message.timestamp >= range_start,
-        Message.timestamp <= range_end,
-        *([Message.phone.in_(stage_phones)] if stage_filter else []),
-    ).group_by(func.date(Message.timestamp)).all():
-        day_counts[str(day)] = {"inbound": int(inbound or 0), "outbound": int(outbound or 0)}
-
-    lead_days = {}
-    for day, count in db.session.query(
-        func.date(Lead.date_added), func.count(Lead.id)
-    ).filter(
-        Lead.user_id == current_user.id,
-        Lead.date_added >= range_start,
-        Lead.date_added <= range_end,
-        *([Lead.stage == stage_filter] if stage_filter else []),
-    ).group_by(func.date(Lead.date_added)).all():
-        lead_days[str(day)] = count
-
     messages_timeline = []
-    cursor = range_start.date()
-    last_day = range_end.date()
-    while cursor <= last_day:
+    cursor = range_start_d
+    while cursor <= range_end_d:
         key = cursor.isoformat()
         inbound = day_counts.get(key, {}).get("inbound", 0)
         outbound = day_counts.get(key, {}).get("outbound", 0)
@@ -810,36 +864,30 @@ def get_stats():
         })
         cursor += timedelta(days=1)
 
-    top_rows = db.session.query(
-        Message.phone,
-        func.count(Message.id),
-        func.max(Message.timestamp),
-    ).filter(
-        Message.user_id == current_user.id,
-        Message.timestamp >= range_start,
-        Message.timestamp <= range_end,
-        *([Message.phone.in_(stage_phones)] if stage_filter else []),
-    ).group_by(Message.phone).order_by(func.count(Message.id).desc()).limit(8).all()
-
-    phones = [row[0] for row in top_rows if row[0]]
-    lead_lookup = {}
-    if phones:
-        for lead in Lead.query.filter(Lead.user_id == current_user.id, Lead.phone.in_(phones)).all():
-            lead_lookup[lead.phone] = lead
-
     top_chats = []
-    for phone, count, last_at in top_rows:
-        if not phone:
-            continue
-        lead = lead_lookup.get(phone)
-        top_chats.append({
-            "phone": phone,
-            "name": lead.name if lead else phone,
-            "messages": count,
-            "unread": getattr(lead, "unread_count", 0) or 0 if lead else 0,
-            "stage": (lead.stage if lead else "New") or "New",
-            "last_at": last_at.isoformat() + "Z" if last_at else None,
-        })
+    if stage_phones is None or stage_phones:
+        top_rows = db.session.query(
+            Message.phone, func.count(Message.id), func.max(Message.timestamp)
+        ).filter(
+            *msg_filters, Message.timestamp >= range_start, Message.timestamp <= range_end
+        ).group_by(Message.phone).order_by(func.count(Message.id).desc()).limit(8).all()
+        phones = [row[0] for row in top_rows if row[0]]
+        lead_lookup = {
+            lead.phone: lead
+            for lead in Lead.query.filter(Lead.user_id == uid, Lead.phone.in_(phones)).all()
+        } if phones else {}
+        for phone, count, last_at in top_rows:
+            if not phone:
+                continue
+            lead = lead_lookup.get(phone)
+            top_chats.append({
+                "phone": phone,
+                "name": lead.name if lead else phone,
+                "messages": count,
+                "unread": (getattr(lead, "unread_count", 0) or 0) if lead else 0,
+                "stage": ((lead.stage if lead else "New") or "New"),
+                "last_at": last_at.isoformat() + "Z" if last_at else None,
+            })
 
     return jsonify({
         "total_leads": total_leads,
@@ -868,8 +916,8 @@ def get_stats():
             "inbound": {"current": inbound_messages, "previous": prev_inbound, "delta_pct": _delta_pct(inbound_messages, prev_inbound)},
             "outbound": {"current": outbound_messages, "previous": prev_outbound, "delta_pct": _delta_pct(outbound_messages, prev_outbound)},
         },
-        "date_from": range_start.isoformat() + 'Z',
-        "date_to": range_end.isoformat() + 'Z',
+        "date_from": range_start.isoformat() + "Z",
+        "date_to": range_end.isoformat() + "Z",
     })
 
 

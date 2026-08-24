@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api, type DashboardStatsParams } from "@/lib/api";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -135,10 +135,12 @@ export function DashboardAnalytics({
     return p;
   }, [datePreset, customFrom, customTo, useCustomRange, stageFilter]);
 
-  const { data: stats, isLoading, isFetching, refetch } = useQuery({
+  const { data: stats, isPending, isFetching, isError, refetch } = useQuery({
     queryKey: ["dashboard-stats", params],
     queryFn: () => api.dashboard.getStats(params),
-    refetchInterval: 60000,
+    placeholderData: keepPreviousData,
+    staleTime: 20_000,
+    refetchInterval: 120000,
   });
 
   const handleExportCSV = () => {
@@ -236,12 +238,18 @@ export function DashboardAnalytics({
   const chartHeight = isCompact ? 196 : 232;
   const periodLabel = formatRange(stats?.date_from, stats?.date_to);
 
-  if (isLoading) {
+  if (isPending && !stats) {
     return <BrandedLoader overlay className={cn("min-h-[min(60dvh,24rem)]", className)} />;
   }
 
   return (
     <div className={cn("space-y-3", className)}>
+      {isError ? (
+        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Could not refresh analytics. Showing the last loaded numbers if available.
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap gap-1.5">
         {unread > 0 && (
           <PendingChip label="Unread" value={unread} tone="info" icon={Inbox} onClick={() => onOpenInbox?.()} />
