@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Menu, Search, LogOut, Shield, Settings, MessageCircle, Clock, CheckCheck } from "lucide-react";
+import { Bell, Menu, Search, LogOut, Shield, Settings, MessageCircle, Clock, CheckCheck, Layers, LayoutTemplate, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useAppPreferences } from "@/hooks/use-app-settings";
-import { api, type Contact, type Schedule } from "@/lib/api";
+import { api, type Contact, type Schedule, type LeadList, type Template } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -29,9 +29,17 @@ interface AppTopbarProps {
   onOpenSettings?: () => void;
   onOpenChat?: (phone: string) => void;
   onOpenScheduler?: () => void;
+  onOpenLists?: (listId?: number) => void;
+  onOpenTemplates?: () => void;
   selectedContact?: string | null;
   trailing?: ReactNode;
 }
+
+type SearchHit =
+  | { kind: "contact"; id: string; contact: Contact }
+  | { kind: "list"; id: string; list: LeadList }
+  | { kind: "template"; id: string; template: Template }
+  | { kind: "schedule"; id: string; schedule: Schedule };
 
 function formatNoticeTime(iso?: string | null) {
   if (!iso) return "";
@@ -65,14 +73,22 @@ export function AppTopbar({
   onOpenSettings,
   onOpenChat,
   onOpenScheduler,
+  onOpenLists,
+  onOpenTemplates,
   selectedContact,
   trailing,
 }: AppTopbarProps) {
   const { toggleSidebar } = useSidebar();
   const prefs = useAppPreferences();
   const [open, setOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [activeHit, setActiveHit] = useState(0);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
   const primedRef = useRef(false);
   const prevUnreadRef = useRef<Record<string, number>>({});
+
+  const query = (search || "").trim();
+  const searching = searchOpen || query.length > 0;
 
   const { data: contacts = [] } = useQuery({
     queryKey: ["contacts"],
@@ -80,12 +96,63 @@ export function AppTopbar({
     refetchInterval: 4000,
   });
 
+  const { data: lists = [] } = useQuery({
+    queryKey: ["lead-lists"],
+    queryFn: api.lists.getAll,
+    enabled: searching,
+    staleTime: 20_000,
+  });
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ["templates"],
+    queryFn: api.templates.getAll,
+    enabled: searching,
+    staleTime: 20_000,
+  });
+
   const { data: schedules = [] } = useQuery({
     queryKey: ["schedules"],
     queryFn: api.schedule.getAll,
-    refetchInterval: 15000,
-    enabled: prefs.notify_pending_schedules,
+    refetchInterval: prefs.notify_pending_schedules ? 15000 : false,
+    enabled: prefs.notify_pending_schedules || searching,
   });
+
+  const hits = useMemo<SearchHit[]>(() => {
+    const q = query.toLowerCase();
+    if (!q) return [];
+    const contactHits: SearchHit[] = contacts
+      .filter((c) => (c.name || "").toLowerCase().includes(q) || (c.phone || "").includes(q))
+      .slice(0, 6)
+      .map((contact) => ({ kind: "contact", id: `c-${contact.phone}`, contact }));
+    const listHits: SearchHit[] = lists
+      .filter(
+        (l) =>
+          (l.title || "").toLowerCase().includes(q) || (l.description || "").toLowerCase().includes(q),
+      )
+      .slice(0, 4)
+      .map((list) => ({ kind: "list", id: `l-${list.id}`, list }));
+    const templateHits: SearchHit[] = templates
+      .filter(
+        (t) =>
+          (t.title || "").toLowerCase().includes(q) || (t.body || "").toLowerCase().includes(q),
+      )
+      .slice(0, 4)
+      .map((template) => ({ kind: "template", id: `t-${template.id}`, template }));
+    const scheduleHits: SearchHit[] = schedules
+      .filter(
+        (s) =>
+          (s.phone || "").includes(q) ||
+          (s.content || "").toLowerCase().includes(q) ||
+          (s.list_title || "").toLowerCase().includes(q),
+      )
+      .slice(0, 3)
+      .map((schedule) => ({ kind: "schedule", id: `s-${schedule.id}`, schedule }));
+    return [...contactHits, ...listHits, ...templateHits, ...scheduleHits];
+  }, [query, contacts, lists, templates, schedules]);
+
+  useEffect(() => {
+    setActiveHit(0);
+  }, [query]);
 
   const unreadChats = useMemo(
     () =>
@@ -165,6 +232,28 @@ export function AppTopbar({
     onOpenScheduler?.();
   };
 
+  const clearSearch = () => {
+    onSearchChange?.("");
+    setSearchOpen(false);
+    setActiveHit(0);
+  };
+
+  const pickHit = (hit: SearchHit) => {
+    if (hit.kind === "contact") onOpenChat?.(hit.contact.phone);
+    if (hit.kind === "list") onOpenLists?.(hit.list.id);
+    if (hit.kind === "template") onOpenTemplates?.();
+    if (hit.kind === "schedule") onOpenScheduler?.();
+    clearSearch();
+  };
+
+  useEffect(() => {
+    const onPointer = (event: MouseEvent) => {
+      if (!searchBoxRef.current?.contains(event.target as Node)) setSearchOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    return () => document.removeEventListener("mousedown", onPointer);
+  }, []);
+
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-2 backdrop-blur sm:px-4">
       <Button
@@ -177,14 +266,133 @@ export function AppTopbar({
         <Menu className="h-4 w-4" />
       </Button>
 
-      <div className="relative hidden min-w-0 flex-1 max-w-md sm:block">
+      <div ref={searchBoxRef} className="relative min-w-0 flex-1 max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          value={search}
-          onChange={(e) => onSearchChange?.(e.target.value)}
-          placeholder="Search contacts, lists, tickets…"
-          className="h-9 rounded-lg border bg-card pl-9 text-sm"
+          value={search ?? ""}
+          onChange={(e) => {
+            onSearchChange?.(e.target.value);
+            setSearchOpen(true);
+          }}
+          onFocus={() => setSearchOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              clearSearch();
+              (e.target as HTMLInputElement).blur();
+              return;
+            }
+            if (!hits.length) return;
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setActiveHit((i) => (i + 1) % hits.length);
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActiveHit((i) => (i - 1 + hits.length) % hits.length);
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              pickHit(hits[activeHit] ?? hits[0]);
+            }
+          }}
+          placeholder="Search contacts, lists, templates…"
+          className="h-9 rounded-lg border bg-card pl-9 pr-8 text-sm"
+          aria-label="Search"
         />
+        {query ? (
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+
+        {searchOpen && query ? (
+          <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border bg-card shadow-elevated">
+            {hits.length === 0 ? (
+              <p className="px-3 py-6 text-center text-xs text-muted-foreground">No matches for “{query}”</p>
+            ) : (
+              <ul className="max-h-[min(22rem,70vh)] overflow-y-auto py-1">
+                {hits.map((hit, index) => {
+                  const active = index === activeHit;
+                  return (
+                    <li key={hit.id}>
+                      <button
+                        type="button"
+                        onMouseEnter={() => setActiveHit(index)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => pickHit(hit)}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-3 py-2 text-left",
+                          active ? "bg-primary/10" : "hover:bg-muted/50",
+                        )}
+                      >
+                        {hit.kind === "contact" ? (
+                          <>
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold text-primary">
+                              {(hit.contact.name || "?").slice(0, 2).toUpperCase()}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-medium">{hit.contact.name || hit.contact.phone}</span>
+                              <span className="block truncate font-mono text-[11px] tabular-nums text-muted-foreground">
+                                {hit.contact.phone}
+                              </span>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">Chat</span>
+                          </>
+                        ) : null}
+                        {hit.kind === "list" ? (
+                          <>
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                              <Layers className="h-3.5 w-3.5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-medium">{hit.list.title}</span>
+                              <span className="block text-[11px] text-muted-foreground">
+                                {hit.list.count} contact{hit.list.count !== 1 ? "s" : ""}
+                              </span>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">List</span>
+                          </>
+                        ) : null}
+                        {hit.kind === "template" ? (
+                          <>
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                              <LayoutTemplate className="h-3.5 w-3.5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-medium">{hit.template.title}</span>
+                              <span className="block truncate text-[11px] text-muted-foreground">{hit.template.body}</span>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">Template</span>
+                          </>
+                        ) : null}
+                        {hit.kind === "schedule" ? (
+                          <>
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-warning/15 text-warning">
+                              <Clock className="h-3.5 w-3.5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-medium">
+                                {hit.schedule.list_title || hit.schedule.phone}
+                              </span>
+                              <span className="block truncate text-[11px] text-muted-foreground">{hit.schedule.content}</span>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">Schedule</span>
+                          </>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ) : null}
       </div>
 
       <div className="ml-auto flex items-center gap-1">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Users, Plus, Send, Trash2, Edit3, Loader2,
   Layers, X, ChevronLeft, Search, Filter,
@@ -22,9 +22,10 @@ import { ListEditorModal } from "./ListEditorModal";
 interface ListManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
+  openListId?: number | null;
 }
 
-export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
+export function ListManagerModal({ isOpen, onClose, openListId }: ListManagerModalProps) {
   const queryClient = useQueryClient();
   const prefs = useAppPreferences();
   const [searchQuery, setSearchQuery] = useState("");
@@ -47,6 +48,12 @@ export function ListManagerModal({ isOpen, onClose }: ListManagerModalProps) {
     queryFn: api.lists.getAll,
     enabled: isOpen
   });
+
+  useEffect(() => {
+    if (!isOpen || openListId == null) return;
+    const match = lists.find((l: { id: number }) => l.id === openListId);
+    if (match) setEditingList(match);
+  }, [isOpen, openListId, lists]);
 
   // --- MUTATIONS ---
   const createListMutation = useMutation({

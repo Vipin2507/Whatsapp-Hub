@@ -59,6 +59,8 @@ interface ContactListProps {
   onSelectContact: (phone: string) => void;
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
+  searchQuery?: string;
+  onSearchChange?: (value: string) => void;
 }
 
 const LEAD_STAGES = ["New", "Follow-up", "Hot", "Cold", "Closed"];
@@ -105,6 +107,8 @@ export function ContactList({
   onSelectContact,
   collapsed: collapsedProp,
   onCollapsedChange,
+  searchQuery: searchQueryProp,
+  onSearchChange,
 }: ContactListProps) {
   const queryClient = useQueryClient();
   const isCompact = useIsMobile();
@@ -117,7 +121,9 @@ export function ContactList({
     if (onCollapsedChange == null) setInternalCollapsed(next);
   };
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [localSearch, setLocalSearch] = useState("");
+  const searchQuery = searchQueryProp ?? localSearch;
+  const setSearchQuery = onSearchChange ?? setLocalSearch;
   const [filterStage, setFilterStage] = useState<string>("All");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [rangeStart, setRangeStart] = useState("");

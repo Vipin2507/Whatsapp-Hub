@@ -38,6 +38,7 @@ const Index = () => {
   const [activeNav, setActiveNav] = useState<NavKey>("inbox");
   const [contactListCollapsed, setContactListCollapsed] = useState(false);
   const [search, setSearch] = useState("");
+  const [openListId, setOpenListId] = useState<number | null>(null);
 
   const [isTemplateLabOpen, setIsTemplateLabOpen] = useState(false);
   const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
@@ -102,9 +103,10 @@ const Index = () => {
     setIsConversationOpen(false);
   };
 
-  const handleNavigate = (key: NavKey) => {
+  const handleNavigate = (key: NavKey, opts?: { listId?: number }) => {
     closeAllModals();
     setActiveNav(key);
+    setOpenListId(key === "lists" ? opts?.listId ?? null : null);
     if (key === "contacts") setIsManageContactsOpen(true);
     if (key === "lists") setIsListManagerOpen(true);
     if (key === "templates") setIsTemplateLabOpen(true);
@@ -150,6 +152,8 @@ const Index = () => {
               setSelectedContact(phone);
             }}
             onOpenScheduler={() => handleNavigate("scheduler")}
+            onOpenLists={(listId) => handleNavigate("lists", { listId })}
+            onOpenTemplates={() => handleNavigate("templates")}
             selectedContact={selectedContact}
             trailing={
               <button
@@ -265,6 +269,8 @@ const Index = () => {
                         onSelectContact={(phone) => setSelectedContact(phone)}
                         collapsed={contactListCollapsed}
                         onCollapsedChange={setContactListCollapsed}
+                        searchQuery={search}
+                        onSearchChange={setSearch}
                       />
                     </div>
                     <div
@@ -304,7 +310,14 @@ const Index = () => {
       />
       <SchedulerView isOpen={isSchedulerOpen} onClose={() => closeOverlay()} />
       <ConversationView isOpen={isConversationOpen} onClose={() => closeOverlay()} />
-      <ListManagerModal isOpen={isListManagerOpen} onClose={() => closeOverlay()} />
+      <ListManagerModal
+        isOpen={isListManagerOpen}
+        onClose={() => {
+          setOpenListId(null);
+          closeOverlay();
+        }}
+        openListId={openListId}
+      />
     </div>
   );
 };

@@ -1,9 +1,23 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Users, Search, Trash2, Loader2, X, UserMinus,
-  ChevronLeft, UserPlus, ShieldCheck, Filter,
-  ArrowRight, Database, Target, Upload, FileText,
-  CheckCircle2, Download, AlertCircle, Tag, UserCheck, Calendar
+  Search,
+  Loader2,
+  X,
+  UserMinus,
+  ChevronLeft,
+  UserPlus,
+  Users,
+  Database,
+  Upload,
+  FileText,
+  Download,
+  AlertCircle,
+  Tag,
+  UserCheck,
+  Calendar,
+  CheckSquare,
+  Square,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Select,
@@ -18,12 +32,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, Contact } from "@/lib/api";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { extractRawPhoneFromRow, normalizeContactPhone } from "@/lib/phone";
 import { useAppPreferences } from "@/hooks/use-app-settings";
 import { DateField } from "@/components/DateFields";
+import { StatusPill } from "@/components/PendingChip";
 
 interface ListEditorModalProps {
   isOpen: boolean;
@@ -32,6 +46,21 @@ interface ListEditorModalProps {
 }
 
 const LEAD_STAGES = ["New", "Follow-up", "Hot", "Cold", "Closed"];
+
+function stageTone(stage?: string) {
+  switch (stage?.toLowerCase()) {
+    case "hot":
+      return "warning" as const;
+    case "closed":
+      return "success" as const;
+    case "follow-up":
+      return "info" as const;
+    case "cold":
+      return "muted" as const;
+    default:
+      return "info" as const;
+  }
+}
 
 export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModalProps) {
   const queryClient = useQueryClient();
@@ -48,29 +77,38 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [selectedContactIds, setSelectedContactIds] = useState<Set<number>>(new Set());
 
-  // --- 1. DATA QUERIES ---
-  // Fetch current members of this specific list
   const { data: members = [], isLoading: loadingMembers } = useQuery({
     queryKey: ["list-members", targetList?.id],
     queryFn: () => api.lists.getLeads(targetList!.id),
     enabled: !!targetList && isOpen,
   });
 
-  // Fetch all leads from the global database to allow adding them
   const { data: allLeads = [] } = useQuery({
     queryKey: ["contacts"],
     queryFn: api.contacts.getAll,
     enabled: isOpen,
   });
 
-  // --- 2. MUTATIONS ---
+  useEffect(() => {
+    setMemberSearch("");
+    setGlobalSearch("");
+    setStageFilter("All");
+    setAssignedToFilter("All");
+    setDateFilter("all");
+    setRangeStart("");
+    setRangeEnd("");
+    setShowBulkImport(false);
+    setPreviewData([]);
+    setSelectedContactIds(new Set());
+  }, [targetList?.id]);
+
   const addLeadMutation = useMutation({
     mutationFn: (leadId: number) => api.lists.addLeads(targetList!.id.toString(), [leadId]),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["list-members", targetList?.id] });
       queryClient.invalidateQueries({ queryKey: ["lead-lists"] });
       toast.success("Contact added to list");
-    }
+    },
   });
 
   const bulkAddMutation = useMutation({
@@ -78,12 +116,12 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
     onSuccess: (_, leadIds) => {
       queryClient.invalidateQueries({ queryKey: ["list-members", targetList?.id] });
       queryClient.invalidateQueries({ queryKey: ["lead-lists"] });
-      toast.success(`${leadIds.length} contact${leadIds.length > 1 ? 's' : ''} added to list`);
+      toast.success(`${leadIds.length} contact${leadIds.length > 1 ? "s" : ""} added to list`);
       setSelectedContactIds(new Set());
     },
     onError: () => {
       toast.error("Failed to add contacts");
-    }
+    },
   });
 
   const removeMutation = useMutation({
@@ -92,12 +130,11 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
       queryClient.invalidateQueries({ queryKey: ["list-members", targetList?.id] });
       queryClient.invalidateQueries({ queryKey: ["lead-lists"] });
       toast.success("Contact removed from list");
-    }
+    },
   });
 
-  // Bulk import functionality
   const sanitizeBulkData = (data: any[]) => {
-    return data.map(row => {
+    return data.map((row) => {
       const rawPhone = extractRawPhoneFromRow(row as Record<string, unknown>);
       const cleaned = normalizeContactPhone(rawPhone, prefs.default_country_code);
       return {
@@ -110,23 +147,19 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
 
   const bulkImportMutation = useMutation({
     mutationFn: async (leads: any[]) => {
-      // First, create contacts that don't exist
-      const contactsToCreate = leads.map(l => ({
+      const contactsToCreate = leads.map((l) => ({
         phone: l.phone,
         name: l.name,
         stage: l.stage || "New",
-        assigned_to: l.assigned_to || "Unassigned"
+        assigned_to: l.assigned_to || "Unassigned",
       }));
 
       await api.contacts.create(contactsToCreate);
-
-      // Refetch contacts to get the newly created ones with their IDs
       await queryClient.invalidateQueries({ queryKey: ["contacts"] });
       const allContacts = await api.contacts.getAll();
 
-      // Find matching contacts by phone and collect their IDs
       const leadIds: number[] = [];
-      const phonesToFind = new Set(leads.map(l => l.phone));
+      const phonesToFind = new Set(leads.map((l) => l.phone));
 
       for (const contact of allContacts) {
         if (contact.phone && phonesToFind.has(contact.phone) && contact.id) {
@@ -134,7 +167,6 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
         }
       }
 
-      // Add all found leads to the list in one batch
       if (leadIds.length > 0) {
         await api.lists.addLeads(targetList!.id.toString(), leadIds);
       }
@@ -152,7 +184,7 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
     onError: (error: any) => {
       console.error("Bulk import error:", error);
       toast.error(error.message || "Bulk import failed");
-    }
+    },
   });
 
   const handleDownloadSample = () => {
@@ -197,9 +229,9 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
       };
       reader.readAsBinaryString(file);
     }
+    e.target.value = "";
   };
 
-  // --- 3. FILTERING LOGIC ---
   const contactMatchesDateFilter = (contact: Contact) => {
     if (dateFilter === "all") return true;
     const activityStamp = contact.last_message_at || contact.date;
@@ -232,35 +264,52 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
 
   const uniqueAssignedTo = useMemo(() => {
     const assigned = new Set<string>();
-    allLeads.forEach(c => {
-      if (c.assigned_to && c.assigned_to !== "Unassigned") {
-        assigned.add(c.assigned_to);
-      }
+    allLeads.forEach((c) => {
+      if (c.assigned_to && c.assigned_to !== "Unassigned") assigned.add(c.assigned_to);
     });
     return Array.from(assigned).sort();
   }, [allLeads]);
 
-  const filteredMembers = members.filter(m =>
-    m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.phone.includes(memberSearch)
-  );
+  const memberIds = useMemo(() => new Set(members.map((m) => m.id)), [members]);
 
-  const availableLeads = allLeads.filter(l => {
-    const isAlreadyMember = members.some(m => m.id === l.id);
-    const matchesSearch = !globalSearch || l.name.toLowerCase().includes(globalSearch.toLowerCase()) || l.phone.includes(globalSearch);
-    const matchesStage = stageFilter === "All" || (l.stage && l.stage === stageFilter) || (!l.stage && stageFilter === "New");
-    const matchesAssigned = assignedToFilter === "All" || (assignedToFilter === "Unassigned" && (!l.assigned_to || l.assigned_to === "Unassigned")) || (l.assigned_to === assignedToFilter);
-    const matchesDate = contactMatchesDateFilter(l);
-    return !isAlreadyMember && matchesSearch && matchesStage && matchesAssigned && matchesDate;
-  });
+  const filteredMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter((m) => m.name.toLowerCase().includes(q) || m.phone.includes(memberSearch));
+  }, [members, memberSearch]);
+
+  const availableLeads = useMemo(() => {
+    return allLeads.filter((l) => {
+      const isAlreadyMember = memberIds.has(l.id);
+      const matchesSearch =
+        !globalSearch ||
+        l.name.toLowerCase().includes(globalSearch.toLowerCase()) ||
+        l.phone.includes(globalSearch);
+      const matchesStage =
+        stageFilter === "All" || (l.stage && l.stage === stageFilter) || (!l.stage && stageFilter === "New");
+      const matchesAssigned =
+        assignedToFilter === "All" ||
+        (assignedToFilter === "Unassigned" && (!l.assigned_to || l.assigned_to === "Unassigned")) ||
+        l.assigned_to === assignedToFilter;
+      return !isAlreadyMember && matchesSearch && matchesStage && matchesAssigned && contactMatchesDateFilter(l);
+    });
+  }, [allLeads, memberIds, globalSearch, stageFilter, assignedToFilter, dateFilter, rangeStart, rangeEnd]);
+
+  useEffect(() => {
+    setSelectedContactIds((prev) => {
+      const next = new Set([...prev].filter((id) => !memberIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [memberIds]);
+
+  const filtersActive =
+    !!globalSearch || stageFilter !== "All" || assignedToFilter !== "All" || dateFilter !== "all";
 
   const toggleContactSelection = (id: number) => {
-    setSelectedContactIds(prev => {
+    setSelectedContactIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -269,445 +318,406 @@ export function ListEditorModal({ isOpen, onClose, targetList }: ListEditorModal
     if (selectedContactIds.size === availableLeads.length && availableLeads.length > 0) {
       setSelectedContactIds(new Set());
     } else {
-      setSelectedContactIds(new Set(availableLeads.map(l => l.id!).filter((id): id is number => Boolean(id))));
+      setSelectedContactIds(new Set(availableLeads.map((l) => l.id!).filter((id): id is number => Boolean(id))));
     }
   };
 
   const handleBulkAdd = () => {
     if (selectedContactIds.size === 0) return;
-    const ids = Array.from(selectedContactIds);
-    bulkAddMutation.mutate(ids);
+    bulkAddMutation.mutate(Array.from(selectedContactIds));
   };
+
+  const allSelected = selectedContactIds.size === availableLeads.length && availableLeads.length > 0;
 
   if (!isOpen || !targetList) return null;
 
   return (
     <div className="app-overlay z-[110]">
-
-      {/* COMMAND HEADER */}
-      <div className="app-overlay-header">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
-          <Button
-            variant="ghost"
-            onClick={onClose}
-            className="group flex items-center gap-3 text-muted-foreground hover:text-primary font-black uppercase text-xs tracking-widest"
-          >
-            <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-            Back to lists
-          </Button>
-          <div className="hidden h-8 w-px bg-border sm:block" />
-          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground sm:flex">
-              <Target className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h2 className="truncate text-sm font-semibold tracking-tight sm:text-lg">
-                Edit list: <span className="text-primary">{targetList.title}</span>
-              </h2>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                  {members.length} contacts
-                </span>
-              </div>
-            </div>
+      <header className="app-overlay-header">
+        <Button variant="ghost" size="sm" onClick={onClose} className="h-8 gap-1 text-muted-foreground">
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </Button>
+        <div className="h-5 w-px bg-border" />
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Users className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold tracking-tight">
+              Edit list
+              <span className="text-muted-foreground"> · </span>
+              <span className="text-primary">{targetList.title}</span>
+            </h2>
+            <p className="text-[11px] tabular-nums text-muted-foreground">
+              {members.length} member{members.length !== 1 ? "s" : ""}
+            </p>
           </div>
         </div>
-
-        <Button onClick={onClose} variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-          <X className="w-6 h-6" />
+        <Button variant="ghost" size="icon" onClick={onClose} className="ml-auto h-8 w-8 text-muted-foreground">
+          <X className="h-4 w-4" />
         </Button>
-      </div>
+      </header>
 
-      {/* DUAL PANE INTERFACE */}
-      <div className="app-split divide-y divide-border lg:divide-x lg:divide-y-0">
-
-        {/* LEFT PANE: GLOBAL DATABASE (THE SOURCE) */}
-        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col bg-secondary/5">
-          <div className="border-b border-border bg-background/50 p-3 sm:p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                <Database className="w-4 h-4" /> All contacts
+      <div className="app-split">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+          <div className="shrink-0 space-y-3 border-b p-3 sm:p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+                <Database className="h-3.5 w-3.5 text-primary" />
+                Add contacts
               </h3>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowBulkImport(!showBulkImport)}
-                className="h-8 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest border-primary/20 text-primary hover:bg-primary hover:text-white"
-              >
-                <Upload className="w-3.5 h-3.5 mr-1.5" />
-                Bulk Import
-              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                <span className="font-medium tabular-nums text-foreground">{availableLeads.length}</span>
+                {" available"}
+              </p>
+              <div className="ml-auto flex items-center gap-1.5">
+                {selectedContactIds.size > 0 ? (
+                  <>
+                    <Button size="sm" className="h-8" onClick={handleBulkAdd} disabled={bulkAddMutation.isPending}>
+                      {bulkAddMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <UserPlus className="h-3.5 w-3.5" />
+                      )}
+                      Add {selectedContactIds.size}
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-8 text-[11px]" onClick={() => setSelectedContactIds(new Set())}>
+                      Clear
+                    </Button>
+                  </>
+                ) : null}
+                <Button
+                  variant={showBulkImport ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-8"
+                  onClick={() => setShowBulkImport((v) => !v)}
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Import
+                </Button>
+              </div>
             </div>
 
-            {showBulkImport && (
-              <div className="mb-6 p-4 bg-secondary/30 border border-border rounded-xl space-y-3">
+            {showBulkImport ? (
+              <div className="card-soft space-y-3 p-3">
                 {previewData.length === 0 ? (
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl bg-background/50 hover:bg-background cursor-pointer transition-all">
-                    <div className="flex flex-col items-center justify-center">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <label className="flex min-h-[4.5rem] flex-1 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 px-3 py-3 text-center hover:bg-muted/50">
                       {isParsing ? (
-                        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
                       ) : (
                         <>
-                          <FileText className="w-6 h-6 text-muted-foreground mb-2" />
-                          <p className="text-[9px] font-black uppercase tracking-widest">Select CSV/XLSX File</p>
+                          <FileText className="mb-1 h-4 w-4 text-muted-foreground" />
+                          <p className="text-xs font-medium">Drop a CSV or XLSX file</p>
+                          <p className="text-[11px] text-muted-foreground">name, phone, stage, assigned_to</p>
                         </>
                       )}
-                    </div>
-                    <input type="file" className="hidden" accept=".csv, .xlsx" onChange={handleFileUpload} />
-                  </label>
+                      <input type="file" className="hidden" accept=".csv,.xlsx" onChange={handleFileUpload} />
+                    </label>
+                    <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={handleDownloadSample}>
+                      <Download className="h-3.5 w-3.5" />
+                      Template
+                    </Button>
+                  </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                        <p className="text-[9px] font-black uppercase">{previewData.length} records ready</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-success/30 bg-success/10 px-2.5 py-1.5">
+                      <div className="flex items-center gap-1.5 text-xs text-success">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {previewData.length} records ready
                       </div>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => { setPreviewData([]); setShowBulkImport(false); }}
-                        className="h-6 text-[8px]"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => {
+                          setPreviewData([]);
+                          setShowBulkImport(false);
+                        }}
                       >
                         Clear
                       </Button>
                     </div>
-                    <div className="max-h-32 overflow-y-auto border border-border rounded-lg">
-                      <table className="w-full text-[8px] uppercase font-bold">
-                        <thead className="bg-secondary/20 sticky top-0">
+                    <div className="max-h-28 overflow-y-auto rounded-md border">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-muted/60 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                           <tr>
-                            <th className="px-2 py-2 text-left">Name</th>
-                            <th className="px-2 py-2 text-left">Phone</th>
+                            <th className="px-2 py-1.5 text-left">Name</th>
+                            <th className="px-2 py-1.5 text-left">Phone</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {previewData.slice(0, 3).map((row, i) => (
-                            <tr key={i} className="border-t border-border/30">
+                          {previewData.slice(0, 8).map((row, i) => (
+                            <tr key={i} className="border-t border-border/60">
                               <td className="px-2 py-1.5">{row.name}</td>
-                              <td className="px-2 py-1.5 font-mono">{row.phone}</td>
+                              <td className="px-2 py-1.5 font-mono tabular-nums text-muted-foreground">{row.phone}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                      {previewData.length > 8 ? (
+                        <p className="border-t px-2 py-1 text-[11px] text-muted-foreground">
+                          +{previewData.length - 8} more
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => bulkImportMutation.mutate(previewData)}
-                        disabled={bulkImportMutation.isPending}
-                        className="flex-1 h-8 text-[9px] font-black uppercase bg-primary hover:bg-primary/90"
-                      >
-                        {bulkImportMutation.isPending ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          `Add ${previewData.length} contacts`
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleDownloadSample}
-                        className="h-8 px-2 text-[9px] font-black uppercase"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
+                    <Button
+                      className="h-8 w-full"
+                      onClick={() => bulkImportMutation.mutate(previewData)}
+                      disabled={bulkImportMutation.isPending}
+                    >
+                      {bulkImportMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                      Add {previewData.length} contacts
+                    </Button>
                   </div>
                 )}
-                <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
-                  <AlertCircle className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
-                  <p className="text-[8px] font-bold text-amber-500/80 uppercase leading-relaxed">
-                    Phone numbers will be created as contacts if they don't exist.
-                  </p>
-                </div>
+                <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
+                  New phone numbers are created as contacts, then added to this list.
+                </p>
               </div>
-            )}
-            <div className="space-y-3">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[12rem] flex-1">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name or phone..."
+                  placeholder="Search name or number"
                   value={globalSearch}
                   onChange={(e) => setGlobalSearch(e.target.value)}
-                  className="pl-12 h-10 bg-background border-border rounded-lg font-medium text-sm"
+                  className="h-8 pl-8"
                 />
               </div>
 
-              {/* FILTERS */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Select value={stageFilter} onValueChange={setStageFilter}>
-                  <SelectTrigger className="w-36 h-9 rounded-lg bg-secondary/30 border-border text-[10px] font-semibold">
-                    <Tag className="w-3.5 h-3.5 mr-2 text-primary" />
-                    <SelectValue placeholder="Stage">
-                      {stageFilter === "All" ? "All Stages" : stageFilter}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="z-[200]">
-                    <SelectItem value="All">All Stages</SelectItem>
-                    {LEAD_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <Select value={stageFilter} onValueChange={setStageFilter}>
+                <SelectTrigger className="h-8 w-[132px] text-[11px]">
+                  <Tag className="mr-1 h-3 w-3" />
+                  <SelectValue placeholder="Stage">{stageFilter === "All" ? "All stages" : stageFilter}</SelectValue>
+                </SelectTrigger>
+                <SelectContent className="z-[200]">
+                  <SelectItem value="All">All stages</SelectItem>
+                  {LEAD_STAGES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-                <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
-                  <SelectTrigger className="w-40 h-9 rounded-lg bg-secondary/30 border-border text-[10px] font-semibold">
-                    <UserCheck className="w-3.5 h-3.5 mr-2 text-primary" />
-                    <SelectValue placeholder="Assigned to">
-                      {assignedToFilter === "All" ? "All Agents" : assignedToFilter}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="z-[200]">
-                    <SelectItem value="All">All Agents</SelectItem>
-                    <SelectItem value="Unassigned">Unassigned</SelectItem>
-                    {uniqueAssignedTo.map(agent => <SelectItem key={agent} value={agent}>{agent}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+                <SelectTrigger className="h-8 w-[140px] text-[11px]">
+                  <UserCheck className="mr-1 h-3 w-3" />
+                  <SelectValue placeholder="Assigned">
+                    {assignedToFilter === "All" ? "All agents" : assignedToFilter}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="z-[200]">
+                  <SelectItem value="All">All agents</SelectItem>
+                  <SelectItem value="Unassigned">Unassigned</SelectItem>
+                  {uniqueAssignedTo.map((agent) => (
+                    <SelectItem key={agent} value={agent}>
+                      {agent}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-                <Select value={dateFilter} onValueChange={setDateFilter}>
-                  <SelectTrigger className="w-36 h-9 rounded-lg bg-secondary/30 border-border text-[10px] font-semibold">
-                    <Calendar className="w-3.5 h-3.5 mr-2 text-primary" />
-                    <SelectValue placeholder="Date">
-                      {dateFilter === "all" ? "All Time" : dateFilter === "today" ? "Today" : dateFilter === "7days" ? "Last 7 Days" : dateFilter === "30days" ? "Last 30 Days" : "Range"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="z-[200]">
-                    <SelectItem value="all">All Time</SelectItem>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="7days">Last 7 Days</SelectItem>
-                    <SelectItem value="30days">Last 30 Days</SelectItem>
-                    <SelectItem value="range">Custom Range</SelectItem>
-                  </SelectContent>
-                </Select>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className="h-8 w-[132px] text-[11px]">
+                  <Calendar className="mr-1 h-3 w-3" />
+                  <SelectValue placeholder="Date">
+                    {dateFilter === "all"
+                      ? "All time"
+                      : dateFilter === "today"
+                        ? "Today"
+                        : dateFilter === "7days"
+                          ? "Last 7 days"
+                          : dateFilter === "30days"
+                            ? "Last 30 days"
+                            : "Range"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="z-[200]">
+                  <SelectItem value="all">All time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="7days">Last 7 days</SelectItem>
+                  <SelectItem value="30days">Last 30 days</SelectItem>
+                  <SelectItem value="range">Custom range</SelectItem>
+                </SelectContent>
+              </Select>
 
-                {dateFilter === "range" && (
-                  <div className="flex items-center gap-2">
-                    <DateField value={rangeStart} onChange={setRangeStart} placeholder="From" size="sm" allowClear className="w-36" />
-                    <span className="text-muted-foreground text-xs">to</span>
-                    <DateField value={rangeEnd} onChange={setRangeEnd} placeholder="To" size="sm" allowClear min={rangeStart} className="w-36" />
-                  </div>
-                )}
+              {dateFilter === "range" ? (
+                <div className="flex items-center gap-1.5">
+                  <DateField value={rangeStart} onChange={setRangeStart} placeholder="From" size="sm" allowClear className="w-36" />
+                  <span className="text-[11px] text-muted-foreground">to</span>
+                  <DateField value={rangeEnd} onChange={setRangeEnd} placeholder="To" size="sm" allowClear min={rangeStart} className="w-36" />
+                </div>
+              ) : null}
 
-                {(globalSearch || stageFilter !== "All" || assignedToFilter !== "All" || dateFilter !== "all") && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setGlobalSearch("");
-                      setStageFilter("All");
-                      setAssignedToFilter("All");
-                      setDateFilter("all");
-                      setRangeStart("");
-                      setRangeEnd("");
-                    }}
-                    className="h-9 text-[10px] text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="w-3.5 h-3.5 mr-1.5" />
-                    Clear
-                  </Button>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Showing <span className="font-semibold text-foreground">{availableLeads.length}</span> available contact{availableLeads.length !== 1 ? 's' : ''}
-                </p>
-                {selectedContactIds.size > 0 && (
-                  <Button
-                    onClick={handleBulkAdd}
-                    disabled={bulkAddMutation.isPending}
-                    className="h-8 px-4 rounded-lg bg-primary hover:bg-primary/90 text-white text-[10px] font-semibold transition-all"
-                  >
-                    {bulkAddMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                        Adding...
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                        Add {selectedContactIds.size} Selected
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <div className="table-scroll">
-            <div className="min-w-[560px] lg:min-w-0">
-            {/* HEADERS */}
-            <div className="grid grid-cols-12 gap-4 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b-2 border-border/60 bg-muted/20 rounded-t-lg items-center sticky top-0 z-10">
-              <div className="col-span-1 flex justify-center">
-                <button
-                  onClick={toggleSelectAllContacts}
-                  className={cn(
-                    "w-4 h-4 rounded border-2 flex items-center justify-center transition-all hover:opacity-80",
-                    selectedContactIds.size === availableLeads.length && availableLeads.length > 0
-                      ? "bg-blue-500 border-blue-500"
-                      : "border-muted-foreground/50 hover:border-blue-500/50"
-                  )}
-                  title="Select all"
+              {filtersActive ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-[11px] text-muted-foreground"
+                  onClick={() => {
+                    setGlobalSearch("");
+                    setStageFilter("All");
+                    setAssignedToFilter("All");
+                    setDateFilter("all");
+                    setRangeStart("");
+                    setRangeEnd("");
+                  }}
                 >
-                  {selectedContactIds.size === availableLeads.length && availableLeads.length > 0 && (
-                    <CheckCircle2 className="w-3 h-3 text-white" />
-                  )}
-                </button>
-              </div>
-              <div className="col-span-3 font-semibold">Name</div>
-              <div className="col-span-2 text-center font-semibold">Phone</div>
-              <div className="col-span-2 text-center font-semibold">Stage</div>
-              <div className="col-span-2 text-center font-semibold">Assigned</div>
-              <div className="col-span-2 text-right font-semibold">Action</div>
-            </div>
-
-            {/* LIST */}
-            <div className="space-y-0">
-              {availableLeads.map((lead) => {
-                const isSelected = selectedContactIds.has(lead.id!);
-                return (
-                  <div key={lead.id} className={cn(
-                    "grid grid-cols-12 gap-4 items-center px-4 py-2.5 border-b border-border/30 transition-all duration-150 group hover:bg-muted/30",
-                    isSelected && "bg-primary/5 border-l-2 border-l-primary"
-                  )}>
-                    <div className="col-span-1 flex justify-center">
-                      <button
-                        onClick={() => toggleContactSelection(lead.id!)}
-                        className={cn(
-                          "w-4 h-4 rounded border-2 flex items-center justify-center transition-all hover:opacity-80",
-                          isSelected
-                            ? "bg-blue-500 border-blue-500"
-                            : "border-muted-foreground/50 hover:border-blue-500/50"
-                        )}
-                        title="Select contact"
-                      >
-                        {isSelected && (
-                          <CheckCircle2 className="w-3 h-3 text-white" />
-                        )}
-                      </button>
-                    </div>
-                    <div className="col-span-3 flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center font-semibold text-[10px] text-primary shrink-0">
-                        {lead.name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <span className="text-sm font-medium text-foreground truncate">{lead.name}</span>
-                    </div>
-                    <div className="col-span-2 text-center font-mono text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis" title={lead.phone}>
-                      {lead.phone}
-                    </div>
-                    <div className="col-span-2 flex justify-center">
-                      <Badge variant="outline" className="text-[9px] font-semibold px-2 py-0.5 rounded-md">
-                        {lead.stage || "New"}
-                      </Badge>
-                    </div>
-                    <div className="col-span-2 text-center">
-                      <span className="text-xs font-medium text-foreground">{lead.assigned_to || "Unassigned"}</span>
-                    </div>
-                    <div className="col-span-2 flex justify-end">
-                      <Button
-                        size="sm"
-                        onClick={() => addLeadMutation.mutate(lead.id!)}
-                        disabled={addLeadMutation.isPending}
-                        className="h-8 px-3 rounded-md bg-primary hover:bg-primary/90 text-white text-[10px] font-semibold transition-all"
-                      >
-                        <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Add
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-              {availableLeads.length === 0 && (
-                <div className="text-center py-20 opacity-20 italic text-xs font-black uppercase tracking-widest">No contacts found</div>
-              )}
-            </div>
-            </div>
+                  <X className="h-3.5 w-3.5" />
+                  Clear
+                </Button>
+              ) : null}
             </div>
           </div>
-        </div>
 
-        {/* RIGHT PANE: SEGMENT MEMBERS (THE ACTIVE MATRIX) */}
-        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background">
-          <div className="border-b border-border bg-card/30 p-3 sm:p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4" /> In this list
-              </h3>
+          <div className="chat-scroll min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+            <div className="table-scroll">
+              <div className="card-soft min-w-[560px] overflow-hidden lg:min-w-0">
+                <div className="grid grid-cols-12 items-center gap-2 border-b bg-muted/30 px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="col-span-1 flex justify-center">
+                    <button type="button" onClick={toggleSelectAllContacts} className="text-muted-foreground hover:text-primary">
+                      {allSelected ? <CheckSquare className="h-3.5 w-3.5 text-primary" /> : <Square className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                  <div className="col-span-3">Name</div>
+                  <div className="col-span-3 text-center">Phone</div>
+                  <div className="col-span-2 text-center">Stage</div>
+                  <div className="col-span-2 text-center">Assigned</div>
+                  <div className="col-span-1 text-right">Add</div>
+                </div>
+
+                {availableLeads.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-1 py-16 text-center">
+                    <Database className="mb-1 h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      {allLeads.length === 0
+                        ? "No contacts in the registry yet"
+                        : filtersActive
+                          ? "No contacts match these filters"
+                          : "Every contact is already in this list"}
+                    </p>
+                  </div>
+                ) : (
+                  availableLeads.map((lead) => {
+                    const isSelected = selectedContactIds.has(lead.id!);
+                    return (
+                      <div
+                        key={lead.id}
+                        className={cn(
+                          "grid grid-cols-12 items-center gap-2 border-b border-border/60 px-3 py-2 last:border-0 hover:bg-muted/30",
+                          isSelected && "bg-primary/5",
+                        )}
+                      >
+                        <div className="col-span-1 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => toggleContactSelection(lead.id!)}
+                            className="text-muted-foreground hover:text-primary"
+                          >
+                            {isSelected ? <CheckSquare className="h-3.5 w-3.5 text-primary" /> : <Square className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                        <div className="col-span-3 flex min-w-0 items-center gap-2">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold text-primary">
+                            {(lead.name || "?").slice(0, 2).toUpperCase()}
+                          </span>
+                          <span className="truncate text-sm font-medium">{lead.name}</span>
+                        </div>
+                        <div className="col-span-3 truncate text-center font-mono text-xs tabular-nums text-muted-foreground" title={lead.phone}>
+                          {lead.phone}
+                        </div>
+                        <div className="col-span-2 flex justify-center">
+                          <StatusPill label={lead.stage || "New"} tone={stageTone(lead.stage)} />
+                        </div>
+                        <div className="col-span-2 truncate text-center text-xs">{lead.assigned_to || "Unassigned"}</div>
+                        <div className="col-span-1 flex justify-end">
+                          <Button
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => addLeadMutation.mutate(lead.id!)}
+                            disabled={addLeadMutation.isPending}
+                            title="Add to list"
+                          >
+                            <UserPlus className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <aside className="flex max-h-[42dvh] min-h-0 w-full shrink-0 flex-col border-t bg-card lg:max-h-none lg:w-[min(100%,22rem)] lg:border-l lg:border-t-0">
+          <div className="shrink-0 space-y-2 border-b p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold tracking-tight">In this list</h3>
+              <span className="text-[11px] tabular-nums text-muted-foreground">{filteredMembers.length}</span>
             </div>
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Filter current members..."
+                placeholder="Filter members"
                 value={memberSearch}
                 onChange={(e) => setMemberSearch(e.target.value)}
-                className="pl-12 h-14 bg-secondary/20 border-border rounded-2xl font-bold"
+                className="h-8 pl-8"
               />
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <div className="table-scroll">
-            <div className="min-w-[560px] lg:min-w-0">
-            {/* HEADERS */}
-            <div className="grid grid-cols-12 gap-4 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b-2 border-border/60 bg-muted/20 rounded-t-lg items-center sticky top-0 z-10">
-              <div className="col-span-4 font-semibold">Name</div>
-              <div className="col-span-2 text-center font-semibold">Phone</div>
-              <div className="col-span-2 text-center font-semibold">Stage</div>
-              <div className="col-span-2 text-center font-semibold">Assigned</div>
-              <div className="col-span-2 text-right font-semibold">Action</div>
-            </div>
-
-            {/* LIST */}
-            <div className="space-y-0">
-              {loadingMembers ? (
-                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" /></div>
-              ) : filteredMembers.map((member) => (
-                <div key={member.id} className="grid grid-cols-12 gap-4 items-center px-4 py-2.5 border-b border-border/30 transition-all duration-150 group hover:bg-muted/30 bg-primary/5">
-                  <div className="col-span-4 flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-semibold text-[10px] shrink-0">
-                      {member.name.substring(0, 2).toUpperCase()}
+          <div className="chat-scroll min-h-0 flex-1 overflow-y-auto">
+            {loadingMembers ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-16">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <p className="text-[11px] text-muted-foreground">Loading members</p>
+              </div>
+            ) : filteredMembers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-1 px-4 py-16 text-center">
+                <Users className="mb-1 h-4 w-4 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">
+                  {members.length === 0 ? "No contacts in this list yet" : "No members match that search"}
+                </p>
+              </div>
+            ) : (
+              filteredMembers.map((member) => (
+                <div
+                  key={member.id}
+                  className="group flex items-center gap-2 border-b border-border/60 px-3 py-2 last:border-0 hover:bg-muted/30"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-[10px] font-semibold text-primary-foreground">
+                    {(member.name || "?").slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{member.name}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <p className="truncate font-mono text-[11px] tabular-nums text-muted-foreground">{member.phone}</p>
+                      <StatusPill label={member.stage || "New"} tone={stageTone(member.stage)} className="shrink-0 text-[10px]" />
                     </div>
-                    <span className="text-sm font-medium text-foreground truncate">{member.name}</span>
                   </div>
-                  <div className="col-span-2 text-center font-mono text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis" title={member.phone}>
-                    {member.phone}
-                  </div>
-                  <div className="col-span-2 flex justify-center">
-                    <Badge variant="outline" className="text-[9px] font-semibold px-2 py-0.5 rounded-md border-primary/20 text-primary">
-                      {member.stage || "New"}
-                    </Badge>
-                  </div>
-                  <div className="col-span-2 text-center">
-                    <span className="text-xs font-medium text-foreground">{member.assigned_to || "Unassigned"}</span>
-                  </div>
-                  <div className="col-span-2 flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeMutation.mutate(member.id!)}
-                      className="h-8 w-8 rounded-md hover:bg-destructive/10 text-destructive opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                    >
-                      <UserMinus className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                    title="Remove from list"
+                    onClick={() => removeMutation.mutate(member.id!)}
+                    disabled={removeMutation.isPending}
+                  >
+                    <UserMinus className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-              ))}
-              {filteredMembers.length === 0 && (
-                <div className="text-center py-20 text-sm text-muted-foreground">No contacts in this list yet</div>
-              )}
-            </div>
-            </div>
-            </div>
+              ))
+            )}
           </div>
-        </div>
+        </aside>
       </div>
-
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { 
-          background: hsl(var(--border)); 
-          border-radius: 10px; 
-        }
-      `}</style>
     </div>
   );
 }
