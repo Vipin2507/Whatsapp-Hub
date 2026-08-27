@@ -8,8 +8,6 @@ import {
   Tag,
   Clock,
   Upload,
-  CheckSquare,
-  Square,
   Edit3,
   Trash2,
   XCircle,
@@ -52,6 +50,7 @@ import { PhoneField } from "@/components/PhoneField";
 import { composeDialedNumber, splitPhoneNumber } from "@/lib/countries";
 import { EASE, hoverLift, tapScale } from "@/lib/motion";
 import { StatusPill } from "@/components/PendingChip";
+import { SelectCheck } from "@/components/SelectCheck";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAppPreferences } from "@/hooks/use-app-settings";
 
@@ -390,18 +389,21 @@ export function ContactList({
               {selectMode ? "Cancel" : "Select"}
             </button>
             {selectMode && (
-              <button
-                type="button"
-                onClick={handleSelectAll}
-                className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-primary"
-              >
-                {selectedIds.length === filteredContacts.length ? (
-                  <CheckSquare className="h-3 w-3 text-primary" />
-                ) : (
-                  <Square className="h-3 w-3" />
-                )}
-                All
-              </button>
+              <div className="ml-2 inline-flex items-center gap-1.5">
+                <SelectCheck
+                  checked={selectedIds.length === filteredContacts.length && filteredContacts.length > 0}
+                  indeterminate={selectedIds.length > 0 && selectedIds.length < filteredContacts.length}
+                  onClick={handleSelectAll}
+                  label="Select all"
+                />
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  className="text-[10px] font-medium text-muted-foreground hover:text-primary"
+                >
+                  All
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -461,17 +463,13 @@ export function ContactList({
                   className="flex items-stretch"
                 >
                   {selectMode && (
-                    <button
-                      type="button"
-                      onClick={(e) => toggleSelect(contact.id!, e)}
-                      className="flex w-11 shrink-0 items-center justify-center text-muted-foreground"
-                    >
-                      {selectedIds.includes(contact.id!) ? (
-                        <CheckSquare className="h-3.5 w-3.5 text-primary" />
-                      ) : (
-                        <Square className="h-3.5 w-3.5" />
-                      )}
-                    </button>
+                    <div className="flex w-11 shrink-0 items-center justify-center">
+                      <SelectCheck
+                        checked={selectedIds.includes(contact.id!)}
+                        onClick={(e) => toggleSelect(contact.id!, e)}
+                        label={`Select ${contact.name || contact.phone}`}
+                      />
+                    </div>
                   )}
                   <button
                     type="button"

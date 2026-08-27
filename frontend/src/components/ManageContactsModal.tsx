@@ -12,8 +12,6 @@ import {
   Tag,
   UserCheck,
   Calendar,
-  CheckSquare,
-  Square,
   Save,
   Eraser,
 } from "lucide-react";
@@ -34,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { BulkActionModal } from "./BulkActionModal";
 import { StatusPill } from "@/components/PendingChip";
+import { SelectCheck } from "@/components/SelectCheck";
 import { PhoneField } from "@/components/PhoneField";
 import { composeDialedNumber, splitPhoneNumber } from "@/lib/countries";
 
@@ -471,13 +470,12 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
           <div className="card-soft min-w-[640px] overflow-hidden lg:min-w-0">
             <div className="grid grid-cols-12 items-center gap-2 border-b bg-muted/30 px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               <div className="col-span-1 flex justify-center">
-                <button type="button" onClick={handleSelectAll} className="text-muted-foreground hover:text-primary">
-                  {selectedIds.length === filtered.length && filtered.length > 0 ? (
-                    <CheckSquare className="h-3.5 w-3.5 text-primary" />
-                  ) : (
-                    <Square className="h-3.5 w-3.5" />
-                  )}
-                </button>
+                <SelectCheck
+                  checked={selectedIds.length === filtered.length && filtered.length > 0}
+                  indeterminate={selectedIds.length > 0 && selectedIds.length < filtered.length}
+                  onClick={handleSelectAll}
+                  label="Select all contacts"
+                />
               </div>
               <div className="col-span-3">Name</div>
               <div className="col-span-2 text-center">Phone</div>
@@ -513,13 +511,11 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
                     )}
                   >
                     <div className="col-span-1 flex justify-center">
-                      <button type="button" onClick={() => toggleSelect(c.id!)} className="text-muted-foreground hover:text-primary">
-                        {selectedIds.includes(c.id!) ? (
-                          <CheckSquare className="h-3.5 w-3.5 text-primary" />
-                        ) : (
-                          <Square className="h-3.5 w-3.5" />
-                        )}
-                      </button>
+                      <SelectCheck
+                        checked={selectedIds.includes(c.id!)}
+                        onClick={() => toggleSelect(c.id!)}
+                        label={`Select ${c.name || c.phone}`}
+                      />
                     </div>
                     <div className="col-span-3 flex min-w-0 items-center gap-2">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold text-primary">

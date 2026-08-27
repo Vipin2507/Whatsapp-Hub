@@ -19,8 +19,6 @@ import {
   Play,
   Layers,
   Eraser,
-  CheckSquare,
-  Square,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, Schedule, Template, RecurrenceType, RecurrenceConfig, Contact, LeadList } from "@/lib/api";
@@ -43,6 +41,7 @@ import { useAppPreferences } from "@/hooks/use-app-settings";
 import { DateField, DateTimeField, TimeField } from "@/components/DateFields";
 import { PhoneField } from "@/components/PhoneField";
 import { composeDialedNumber, splitPhoneNumber } from "@/lib/countries";
+import { SelectCheck } from "@/components/SelectCheck";
 
 interface SchedulerViewProps {
   isOpen: boolean;
@@ -1057,13 +1056,12 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
           ) : (
             <div className="space-y-2 pb-16">
               <div className="flex items-center gap-2 px-1">
-                <button type="button" onClick={toggleSelectAll} className="text-muted-foreground hover:text-primary">
-                  {selectedSchedules.size === listForView.length && listForView.length > 0 ? (
-                    <CheckSquare className="h-3.5 w-3.5 text-primary" />
-                  ) : (
-                    <Square className="h-3.5 w-3.5" />
-                  )}
-                </button>
+                <SelectCheck
+                  checked={selectedSchedules.size === listForView.length && listForView.length > 0}
+                  indeterminate={selectedSchedules.size > 0 && selectedSchedules.size < listForView.length}
+                  onClick={toggleSelectAll}
+                  label="Select all schedules"
+                />
                 <span className="text-[11px] text-muted-foreground">Select all</span>
               </div>
               {listForView.map((msg) => {
@@ -1081,17 +1079,12 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
                     )}
                   >
                     <div className="flex items-start gap-2">
-                      <button
-                        type="button"
+                      <SelectCheck
+                        checked={isSelected}
                         onClick={() => toggleScheduleSelection(msg.id)}
-                        className="mt-0.5 text-muted-foreground hover:text-primary"
-                      >
-                        {isSelected ? (
-                          <CheckSquare className="h-3.5 w-3.5 text-primary" />
-                        ) : (
-                          <Square className="h-3.5 w-3.5" />
-                        )}
-                      </button>
+                        label="Select schedule"
+                        className="mt-0.5"
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <h3 className="truncate text-sm font-medium">{name}</h3>

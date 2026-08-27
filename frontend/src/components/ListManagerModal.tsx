@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Users, Plus, Send, Trash2, Edit3, Loader2,
   Layers, X, ChevronLeft, Search, Filter,
-  ArrowRight, Target, Activity, CheckCircle2,
+  ArrowRight, Target, Activity,
   Upload, FileText, CheckCircle, Download, AlertCircle
 } from "lucide-react";
 import { read, utils, writeFile } from "xlsx";
@@ -18,6 +18,7 @@ import { extractRawPhoneFromRow, normalizeContactPhone } from "@/lib/phone";
 import { useAppPreferences } from "@/hooks/use-app-settings";
 import { BroadcastModal } from "./BroadcastModal";
 import { ListEditorModal } from "./ListEditorModal";
+import { SelectCheck } from "@/components/SelectCheck";
 
 interface ListManagerModalProps {
   isOpen: boolean;
@@ -499,20 +500,12 @@ export function ListManagerModal({ isOpen, onClose, openListId }: ListManagerMod
           <div className="min-w-[640px] lg:min-w-0">
           <div className="grid grid-cols-12 gap-4 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b-2 border-border/60 bg-muted/20 rounded-t-lg items-center">
             <div className="col-span-1 flex justify-center">
-              <button
+              <SelectCheck
+                checked={selectedLists.size === filteredLists.length && filteredLists.length > 0}
+                indeterminate={selectedLists.size > 0 && selectedLists.size < filteredLists.length}
                 onClick={toggleSelectAll}
-                className={cn(
-                  "w-4 h-4 rounded border-2 flex items-center justify-center transition-all hover:opacity-80",
-                  selectedLists.size === filteredLists.length && filteredLists.length > 0
-                    ? "bg-blue-500 border-blue-500"
-                    : "border-muted-foreground/50 hover:border-blue-500/50"
-                )}
-                title="Select all"
-              >
-                {selectedLists.size === filteredLists.length && filteredLists.length > 0 && (
-                  <CheckCircle2 className="w-3 h-3 text-white" />
-                )}
-              </button>
+                label="Select all lists"
+              />
             </div>
             <div className="col-span-4 font-semibold">List Name</div>
             <div className="col-span-2 text-center font-semibold">Contacts</div>
@@ -537,20 +530,11 @@ export function ListManagerModal({ isOpen, onClose, openListId }: ListManagerMod
                 >
                   {/* CHECKBOX */}
                   <div className="col-span-1 flex justify-center">
-                    <button
+                    <SelectCheck
+                      checked={isSelected}
                       onClick={() => toggleListSelection(list.id)}
-                      className={cn(
-                        "w-4 h-4 rounded border-2 flex items-center justify-center transition-all hover:opacity-80",
-                        isSelected
-                          ? "bg-blue-500 border-blue-500"
-                          : "border-muted-foreground/50 hover:border-blue-500/50"
-                      )}
-                      title="Select list"
-                    >
-                      {isSelected && (
-                        <CheckCircle2 className="w-3 h-3 text-white" />
-                      )}
-                    </button>
+                      label={`Select ${list.title}`}
+                    />
                   </div>
 
                   {/* IDENTITY */}
