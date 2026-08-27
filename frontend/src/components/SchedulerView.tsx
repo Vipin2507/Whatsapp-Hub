@@ -41,6 +41,8 @@ import { toast } from "sonner";
 import { StatusPill } from "@/components/PendingChip";
 import { useAppPreferences } from "@/hooks/use-app-settings";
 import { DateField, DateTimeField, TimeField } from "@/components/DateFields";
+import { PhoneField } from "@/components/PhoneField";
+import { composeDialedNumber, splitPhoneNumber } from "@/lib/countries";
 
 interface SchedulerViewProps {
   isOpen: boolean;
@@ -169,7 +171,7 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
     if (!editingSchedule) setCountryCode(prefs.default_country_code);
   }, [prefs.default_country_code, editingSchedule]);
 
-  const combinePhone = (cc: string, ph: string) => `${cc.replace(/\D/g, "")}${ph.replace(/\D/g, "")}`;
+  const combinePhone = (cc: string, ph: string) => composeDialedNumber(cc, ph);
 
   const resetForge = () => {
     setNewPhone("");
@@ -413,16 +415,9 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
     setNewTime(schedule.time.replace(" ", "T"));
     setTargetType("single");
     setUseExistingContact(false);
-    if (schedule.phone.startsWith(prefs.default_country_code)) {
-      setCountryCode(prefs.default_country_code);
-      setNewPhone(schedule.phone.slice(prefs.default_country_code.length));
-    } else if (schedule.phone.startsWith("91") && prefs.default_country_code !== "91") {
-      setCountryCode("91");
-      setNewPhone(schedule.phone.slice(2));
-    } else {
-      setCountryCode("");
-      setNewPhone(schedule.phone);
-    }
+    const split = splitPhoneNumber(schedule.phone, prefs.default_country_code);
+    setCountryCode(split.dial);
+    setNewPhone(split.national);
     setTimeout(() => {
       document.querySelector(".app-split-side")?.scrollTo({ top: 0, behavior: "smooth" });
     }, 100);
@@ -670,23 +665,12 @@ export function SchedulerView({ isOpen, onClose }: SchedulerViewProps) {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <div className="flex gap-2">
-                    <div className="relative w-16 shrink-0">
-                      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">+</span>
-                      <Input
-                        value={countryCode}
-                        onChange={(e) => setCountryCode(e.target.value)}
-                        placeholder={prefs.default_country_code}
-                        className="h-9 pl-5 text-center"
-                      />
-                    </div>
-                    <Input
-                      value={newPhone}
-                      onChange={(e) => setNewPhone(e.target.value)}
-                      placeholder="9876543210"
-                      className="h-9"
-                    />
-                  </div>
+                  <PhoneField
+                    countryCode={countryCode}
+                    nationalNumber={newPhone}
+                    onCountryCodeChange={setCountryCode}
+                    onNationalNumberChange={setNewPhone}
+                  />
                 )}
               </div>
             ) : (

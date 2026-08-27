@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Users,
   Search,
@@ -23,7 +23,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { normalizeContactPhone } from "@/lib/phone";
+import { DateField } from "@/components/DateFields";
 import { useAppPreferences } from "@/hooks/use-app-settings";
 import {
   Select,
@@ -34,7 +34,8 @@ import {
 } from "@/components/ui/select";
 import { BulkActionModal } from "./BulkActionModal";
 import { StatusPill } from "@/components/PendingChip";
-import { DateField } from "@/components/DateFields";
+import { PhoneField } from "@/components/PhoneField";
+import { composeDialedNumber, splitPhoneNumber } from "@/lib/countries";
 
 interface ManageContactsModalProps {
   isOpen: boolean;
@@ -76,6 +77,7 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
   const [editingId, setEditingId] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [newCountryCode, setNewCountryCode] = useState("91");
   const [newStage, setNewStage] = useState("New");
   const [newAgent, setNewAgent] = useState("");
 
@@ -85,10 +87,15 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
     enabled: isOpen,
   });
 
+  useEffect(() => {
+    if (isOpen && !editingId) setNewCountryCode(prefs.default_country_code);
+  }, [isOpen, prefs.default_country_code]);
+
   const resetForge = () => {
     setEditingId(null);
     setNewName("");
     setNewPhone("");
+    setNewCountryCode(prefs.default_country_code);
     setNewStage("New");
     setNewAgent("");
   };
@@ -99,7 +106,9 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
     const contactStage = c.stage && LEAD_STAGES.includes(c.stage) ? c.stage : "New";
     setNewStage(contactStage);
     setNewAgent(c.assigned_to || "");
-    setNewPhone(c.phone || "");
+    const split = splitPhoneNumber(c.phone || "", prefs.default_country_code);
+    setNewCountryCode(split.dial);
+    setNewPhone(split.national);
     setTimeout(() => {
       document.getElementById("registry-forge")?.scrollTo({ top: 0, behavior: "smooth" });
     }, 100);
@@ -270,14 +279,11 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
 
             <div className="space-y-1">
               <label className={fieldLabel}>Phone</label>
-              <Input
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                placeholder={`+${prefs.default_country_code}… or 10-digit local`}
-                className="h-9"
+              <PhoneField
+                countryCode={newCountryCode}
+                nationalNumber={newPhone}
+                onCountryCodeChange={setNewCountryCode}
+                onNationalNumberChange={setNewPhone}
               />
             </div>
 
@@ -310,7 +316,7 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
 
             <Button
               onClick={() => {
-                const phone = normalizeContactPhone(newPhone, prefs.default_country_code);
+                const phone = composeDialedNumber(newCountryCode, newPhone);
                 if (!newName?.trim()) return toast.error("Name is required");
                 if (!phone) return toast.error("Enter a valid phone number");
                 upsertMutation.mutate({
@@ -337,7 +343,7 @@ export function ManageContactsModal({ isOpen, onClose }: ManageContactsModalProp
           </div>
 
           <p className="rounded-lg border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            Use a full international number with +country code, or a 10-digit India mobile (91 is added automatically).
+            Choose a country code, then enter the local number. Pasting a number that starts with + updates the country automatically.
           </p>
         </aside>
 

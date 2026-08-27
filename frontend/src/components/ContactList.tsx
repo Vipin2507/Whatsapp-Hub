@@ -48,7 +48,8 @@ import { toast } from "sonner";
 import { BulkImportModal } from "./BulkImportModal";
 import { BulkActionModal } from "./BulkActionModal";
 import { DateField } from "@/components/DateFields";
-import { normalizeContactPhone } from "@/lib/phone";
+import { PhoneField } from "@/components/PhoneField";
+import { composeDialedNumber, splitPhoneNumber } from "@/lib/countries";
 import { EASE, hoverLift, tapScale } from "@/lib/motion";
 import { StatusPill } from "@/components/PendingChip";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -136,8 +137,10 @@ export function ContactList({
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [editPhoneInput, setEditPhoneInput] = useState("");
+  const [editCountryCode, setEditCountryCode] = useState("91");
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [newCountryCode, setNewCountryCode] = useState("91");
   const [newStage, setNewStage] = useState("New");
   const [newAssignedTo, setNewAssignedTo] = useState("");
 
@@ -226,13 +229,15 @@ export function ContactList({
 
   const handleStartEdit = (contact: Contact) => {
     setEditingContact(contact);
-    setEditPhoneInput(contact.phone || "");
+    const split = splitPhoneNumber(contact.phone || "", prefs.default_country_code);
+    setEditCountryCode(split.dial);
+    setEditPhoneInput(split.national);
   };
 
   const updateContactMutation = useMutation({
     mutationFn: async () => {
       if (!editingContact?.id) throw new Error("No contact");
-      const phone = normalizeContactPhone(editPhoneInput, prefs.default_country_code);
+      const phone = composeDialedNumber(editCountryCode, editPhoneInput);
       if (!phone) throw new Error("Invalid phone");
       return api.contacts.update(editingContact.id, {
         name: editingContact.name,
@@ -246,6 +251,7 @@ export function ContactList({
       toast.success("Contact updated");
       setEditingContact(null);
       setEditPhoneInput("");
+      setEditCountryCode(prefs.default_country_code);
     },
     onError: (err: Error) => {
       toast.error(err?.message === "Invalid phone" ? "Enter a valid phone number" : "Failed to update contact");
@@ -263,13 +269,14 @@ export function ContactList({
   const resetForm = () => {
     setNewName("");
     setNewPhone("");
+    setNewCountryCode(prefs.default_country_code);
     setNewStage("New");
     setNewAssignedTo("");
   };
 
   const handleAddContact = () => {
     if (!newName || !newPhone) return toast.error("Name and phone are required");
-    const phone = normalizeContactPhone(newPhone, prefs.default_country_code);
+    const phone = composeDialedNumber(newCountryCode, newPhone);
     if (!phone) return toast.error("Enter a valid phone number");
     addContactMutation.mutate({
       name: newName,
@@ -593,7 +600,10 @@ export function ContactList({
           isCollapsed ? "flex flex-col gap-1.5" : "grid grid-cols-2 gap-1.5",
         )}
       >
-        <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+        <Dialog open={isAddModalOpen} onOpenChange={(open) => {
+          setIsAddModalOpen(open);
+          if (open) setNewCountryCode(prefs.default_country_code);
+        }}>
           <DialogTrigger asChild>
             <Button size="sm" className={cn("h-9 w-full text-xs", isCollapsed && "px-0")}>
               <UserPlus className="h-3.5 w-3.5" />
@@ -616,13 +626,13 @@ export function ContactList({
               </div>
               <div className="space-y-1">
                 <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Phone</label>
-                <Input
-                  type="tel"
-                  placeholder="+234… or 10-digit India"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  className="h-9"
+                <PhoneField
+                  countryCode={newCountryCode}
+                  nationalNumber={newPhone}
+                  onCountryCodeChange={setNewCountryCode}
+                  onNationalNumberChange={setNewPhone}
                 />
+                <p className="text-[11px] text-muted-foreground">Select the country, then enter the local number.</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
@@ -682,6 +692,7 @@ export function ContactList({
           if (!open) {
             setEditingContact(null);
             setEditPhoneInput("");
+            setEditCountryCode(prefs.default_country_code);
           }
         }}
       >
@@ -705,11 +716,11 @@ export function ContactList({
             </div>
             <div className="space-y-1">
               <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Phone</label>
-              <Input
-                type="tel"
-                value={editPhoneInput}
-                onChange={(e) => setEditPhoneInput(e.target.value)}
-                className="h-9"
+              <PhoneField
+                countryCode={editCountryCode}
+                nationalNumber={editPhoneInput}
+                onCountryCodeChange={setEditCountryCode}
+                onNationalNumberChange={setEditPhoneInput}
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
