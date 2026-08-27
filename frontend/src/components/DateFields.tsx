@@ -139,7 +139,7 @@ export function DateField({
           ) : null}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="z-[220] w-auto border bg-card p-2 shadow-elevated">
+      <PopoverContent align="start" className="z-[400] w-auto border bg-card p-2 shadow-elevated">
         <Calendar
           mode="single"
           selected={selected}
@@ -200,7 +200,7 @@ export function DateTimeField({
           <span className="min-w-0 flex-1 truncate">{label || placeholder}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="z-[220] w-auto border bg-card p-2 shadow-elevated">
+      <PopoverContent align="start" className="z-[400] w-auto border bg-card p-2 shadow-elevated">
         <Calendar
           mode="single"
           selected={selected}
@@ -249,7 +249,7 @@ export function TimeField({
           <span className="min-w-0 flex-1 truncate">{time ? formatDisplayTime(time) : placeholder}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="z-[220] w-auto border bg-card p-3 shadow-elevated">
+      <PopoverContent align="start" className="z-[400] w-auto border bg-card p-3 shadow-elevated">
         <TimeSelects value={time || "09:00"} onChange={onChange} />
       </PopoverContent>
     </Popover>

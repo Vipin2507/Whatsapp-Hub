@@ -1,24 +1,44 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  X, ChevronLeft, Plus, Loader2, Trash2, Edit3, Save,
-  MessageSquare, Users, Layers, Clock, Zap, ArrowRight,
-  CheckCircle2, AlertCircle, Play, Pause, Copy, Eye, Search, User,
-  Library, Calendar, Timer
+  X,
+  ChevronLeft,
+  Plus,
+  Loader2,
+  Trash2,
+  Edit3,
+  MessageSquare,
+  Layers,
+  Clock,
+  ArrowRight,
+  Play,
+  Pause,
+  Search,
+  User,
+  Library,
+  Calendar,
+  Timer,
+  Bot,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, Conversation, ConversationDetail, ConversationStep, ConversationTrigger, ConversationTriggerType, Template } from "@/lib/api";
+import {
+  api,
+  Conversation,
+  ConversationStep,
+  ConversationTrigger,
+  ConversationTriggerType,
+  Contact,
+  LeadList,
+} from "@/lib/api";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import { Badge } from "./ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
+  SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -26,28 +46,89 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { DateField, TimeField } from "@/components/DateFields";
+import { PhoneField } from "@/components/PhoneField";
+import { StatusPill } from "@/components/PendingChip";
+import { composeDialedNumber } from "@/lib/countries";
+import { useAppPreferences } from "@/hooks/use-app-settings";
 
 interface ConversationViewProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+const fieldLabel = "text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
+
+type DelayUnit = "seconds" | "minutes" | "hours" | "days" | "months";
+
+function delayToSeconds(value: number, unit: string): number {
+  switch (unit) {
+    case "minutes":
+      return value * 60;
+    case "hours":
+      return value * 3600;
+    case "days":
+      return value * 86400;
+    case "months":
+      return value * 2592000;
+    default:
+      return value;
+  }
+}
+
+function formatDelay(seconds?: number) {
+  const total = seconds || 0;
+  if (total <= 0) return null;
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (secs && days === 0) parts.push(`${secs}s`);
+  return parts.join(" ") || `${total}s`;
+}
+
+function triggerLabel(trigger: ConversationTrigger) {
+  const value = Array.isArray(trigger.trigger_value)
+    ? trigger.trigger_value.join(", ")
+    : trigger.trigger_value || "";
+  switch (trigger.trigger_type) {
+    case "any":
+      return "Any message";
+    case "keyword":
+      return `Keywords: ${value}`;
+    case "exact":
+      return `Exact: "${value}"`;
+    case "contains":
+      return `Contains: "${value}"`;
+    case "regex":
+      return `Regex: ${value}`;
+    default:
+      return value;
+  }
+}
+
 export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
   const queryClient = useQueryClient();
+  const prefs = useAppPreferences();
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [editingStep, setEditingStep] = useState<ConversationStep | null>(null);
   const [editingTrigger, setEditingTrigger] = useState<ConversationTrigger | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  
-  // New conversation form state
+  const [search, setSearch] = useState("");
+
   const [newConvName, setNewConvName] = useState("");
   const [newConvDescription, setNewConvDescription] = useState("");
   const [newConvTargetType, setNewConvTargetType] = useState<"contact" | "list">("contact");
   const [newConvTargetPhone, setNewConvTargetPhone] = useState("");
-  const [newConvTargetListId, setNewConvTargetListId] = useState<string>("");
+  const [newConvCountryCode, setNewConvCountryCode] = useState(prefs.default_country_code);
+  const [newConvTargetListId, setNewConvTargetListId] = useState("");
   const [newConvScheduledTime, setNewConvScheduledTime] = useState("");
 
   const { data: conversations = [], isLoading } = useQuery({
@@ -82,25 +163,37 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
 
   const [contactSearch, setContactSearch] = useState("");
   const [useExistingContact, setUseExistingContact] = useState(false);
-  const [selectedContactId, setSelectedContactId] = useState<string>("");
-  
-  // Steps during creation
-  const [createSteps, setCreateSteps] = useState<Array<{ message_content: string; delay_after_seconds: number; delay_unit: "seconds" | "minutes" | "hours" | "days" | "months"; step_order: number }>>([
-    { message_content: "", delay_after_seconds: 0, delay_unit: "seconds", step_order: 0 }
-  ]);
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const [createSteps, setCreateSteps] = useState<
+    Array<{ message_content: string; delay_after_seconds: number; delay_unit: DelayUnit; step_order: number }>
+  >([{ message_content: "", delay_after_seconds: 0, delay_unit: "seconds", step_order: 0 }]);
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [selectedStepForTemplate, setSelectedStepForTemplate] = useState<number | null>(null);
   const [useExistingConversation, setUseExistingConversation] = useState(false);
-  const [selectedConversationTemplateId, setSelectedConversationTemplateId] = useState<string>("");
+  const [selectedConversationTemplateId, setSelectedConversationTemplateId] = useState("");
+
+  const resetCreateForm = () => {
+    setNewConvName("");
+    setNewConvDescription("");
+    setNewConvTargetPhone("");
+    setNewConvCountryCode(prefs.default_country_code);
+    setNewConvTargetListId("");
+    setNewConvScheduledTime("");
+    setUseExistingContact(false);
+    setSelectedContactId("");
+    setContactSearch("");
+    setCreateSteps([{ message_content: "", delay_after_seconds: 0, delay_unit: "seconds", step_order: 0 }]);
+    setUseExistingConversation(false);
+    setSelectedConversationTemplateId("");
+  };
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      let stepsToCreate = createSteps.filter(s => s.message_content.trim());
-      
-      // If using existing conversation template, load its steps
+      let stepsToCreate = createSteps.filter((s) => s.message_content.trim());
+
       if (useExistingConversation && selectedConversationTemplateId) {
-        const templateConv = await api.conversations.get(parseInt(selectedConversationTemplateId));
-        if (templateConv && templateConv.steps) {
+        const templateConv = await api.conversations.get(parseInt(selectedConversationTemplateId, 10));
+        if (templateConv?.steps) {
           stepsToCreate = templateConv.steps.map((s: ConversationStep, idx: number) => ({
             message_content: s.message_content,
             delay_after_seconds: s.delay_after_seconds || 0,
@@ -109,79 +202,54 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
           }));
         }
       }
-      
-      // Convert delay units to seconds
-      const convertDelayToSeconds = (value: number, unit: string): number => {
-        switch (unit) {
-          case "seconds": return value;
-          case "minutes": return value * 60;
-          case "hours": return value * 3600;
-          case "days": return value * 86400;
-          case "months": return value * 2592000; // ~30 days
-          default: return value;
-        }
-      };
-      
-      // Create conversation first
+
       const convData = await api.conversations.create({
         name: newConvName,
         description: newConvDescription,
         target_type: newConvTargetType,
-        target_phone: newConvTargetType === "contact"
-          ? (useExistingContact && selectedContactId
-              ? contacts.find((c: any) => String(c.id) === selectedContactId)?.phone
-              : newConvTargetPhone)
-          : undefined,
-        target_list_id: newConvTargetType === "list" ? parseInt(newConvTargetListId) : undefined,
+        target_phone:
+          newConvTargetType === "contact"
+            ? useExistingContact && selectedContactId
+              ? contacts.find((c: Contact) => String(c.id) === selectedContactId)?.phone
+              : composeDialedNumber(newConvCountryCode, newConvTargetPhone)
+            : undefined,
+        target_list_id: newConvTargetType === "list" ? parseInt(newConvTargetListId, 10) : undefined,
         initial_scheduled_time: newConvScheduledTime || undefined,
         is_active: true,
       });
-      
-      // Add steps
+
       for (const step of stepsToCreate) {
-        const delayInSeconds = convertDelayToSeconds(step.delay_after_seconds, step.delay_unit || "seconds");
         await api.conversations.addStep(convData.id, {
           step_order: step.step_order,
           message_content: step.message_content,
-          delay_after_seconds: delayInSeconds,
+          delay_after_seconds: delayToSeconds(step.delay_after_seconds, step.delay_unit || "seconds"),
         });
       }
-      
+
       return convData;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       setShowCreateDialog(false);
-      setNewConvName("");
-      setNewConvDescription("");
-      setNewConvTargetPhone("");
-      setNewConvTargetListId("");
-      setNewConvScheduledTime("");
-      setUseExistingContact(false);
-      setSelectedContactId("");
-      setContactSearch("");
-      setCreateSteps([{ message_content: "", delay_after_seconds: 0, delay_unit: "seconds", step_order: 0 }]);
-      setUseExistingConversation(false);
-      setSelectedConversationTemplateId("");
+      resetCreateForm();
       setSelectedConversationId(data.id);
-      toast.success("Conversation created with steps");
+      toast.success("Conversation created");
     },
-    onError: (err: any) => toast.error(err.message || "Failed to create conversation"),
+    onError: (err: Error) => toast.error(err.message || "Failed to create conversation"),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.conversations.delete(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      if (selectedConversationId) setSelectedConversationId(null);
+      if (selectedConversationId === id) setSelectedConversationId(null);
       toast.success("Conversation deleted");
     },
     onError: () => toast.error("Failed to delete"),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Conversation> }) =>
-      api.conversations.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Partial<Conversation> }) => api.conversations.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversationId] });
@@ -227,495 +295,516 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
     },
   });
 
-  const normalizedContactSearch = contactSearch.trim().toLowerCase();
-  const filteredContacts = normalizedContactSearch
-    ? contacts.filter((c: any) => {
-        const name = String(c?.name || "").toLowerCase();
-        const phone = String(c?.phone || "").toLowerCase();
-        return name.includes(normalizedContactSearch) || phone.includes(normalizedContactSearch);
-      })
-    : contacts;
+  const filteredContacts = useMemo(() => {
+    const q = contactSearch.trim().toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter(
+      (c: Contact) =>
+        (c.name || "").toLowerCase().includes(q) || (c.phone || "").toLowerCase().includes(q),
+    );
+  }, [contacts, contactSearch]);
+
+  const filteredConversations = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter(
+      (c) =>
+        (c.name || "").toLowerCase().includes(q) ||
+        (c.description || "").toLowerCase().includes(q) ||
+        (c.target_phone || "").includes(q),
+    );
+  }, [conversations, search]);
+
+  const listTitle = (id?: number) => lists.find((l: LeadList) => l.id === id)?.title || (id ? `List #${id}` : "—");
 
   if (!isOpen) return null;
 
   return (
     <div className="app-overlay z-[100]">
-      {/* Header */}
-      <div className="app-overlay-header">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
-          <Button variant="ghost" onClick={onClose} className="gap-3 text-muted-foreground hover:text-primary">
-            <ChevronLeft className="w-5 h-5" /> Back
-          </Button>
-          <div className="hidden h-8 w-px bg-border sm:block" />
-          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary sm:flex">
-              <MessageSquare className="w-7 h-7 text-violet-500" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold tracking-tight sm:text-lg">Conversations</h2>
-              <p className="hidden text-[10px] text-muted-foreground sm:block">Automated message flows</p>
-            </div>
+      <header className="app-overlay-header">
+        <Button variant="ghost" size="sm" onClick={onClose} className="h-8 gap-1 text-muted-foreground">
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </Button>
+        <div className="h-5 w-px bg-border" />
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Bot className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold tracking-tight">Conversations</h2>
+            <p className="text-[11px] tabular-nums text-muted-foreground">
+              {conversations.length} flow{conversations.length !== 1 ? "s" : ""}
+            </p>
           </div>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)} size="sm" className="h-8 shrink-0">
-          <Plus className="w-4 h-4" /> New Conversation
+        <div className="relative ml-auto w-32 min-w-0 sm:w-56">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search flows"
+            className="h-8 pl-8"
+          />
+        </div>
+        <Button size="sm" className="h-8 shrink-0" onClick={() => setShowCreateDialog(true)}>
+          <Plus className="h-3.5 w-3.5" />
+          New
         </Button>
-      </div>
+      </header>
 
       <div className="app-split">
-        {/* Main: Conversation List Grid */}
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 sm:p-6">
+        <main className="chat-scroll min-h-0 min-w-0 flex-1 overflow-y-auto p-3 sm:p-4">
           <div className="table-scroll">
-          <div className="min-w-[640px] lg:min-w-0">
-          {/* Grid Headers */}
-          <div className="grid grid-cols-12 gap-4 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b-2 border-border/60 bg-muted/20 rounded-t-lg items-center mb-4">
-            <div className="col-span-3 font-semibold">Name</div>
-            <div className="col-span-2 text-center font-semibold">Status</div>
-            <div className="col-span-2 text-center font-semibold">Target</div>
-            <div className="col-span-2 text-center font-semibold">Steps</div>
-            <div className="col-span-2 text-center font-semibold">Created</div>
-            <div className="col-span-1 text-right font-semibold">Actions</div>
-          </div>
+            <div className="card-soft min-w-[640px] overflow-hidden lg:min-w-0">
+              <div className="grid grid-cols-12 items-center gap-2 border-b bg-muted/30 px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <div className="col-span-4">Name</div>
+                <div className="col-span-2 text-center">Status</div>
+                <div className="col-span-2 text-center">Target</div>
+                <div className="col-span-1 text-center">Steps</div>
+                <div className="col-span-2 text-center">Created</div>
+                <div className="col-span-1 text-right">Actions</div>
+              </div>
 
-          {isLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin" /></div>
-          ) : conversations.length === 0 ? (
-            <div className="text-center py-20 text-muted-foreground">
-              <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p className="text-sm font-medium">No conversations yet</p>
-              <p className="text-xs mt-1">Create one to get started</p>
-            </div>
-          ) : (
-            <div className="space-y-1 pb-20">
-              {conversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  onClick={() => setSelectedConversationId(conv.id)}
-                  className={cn(
-                    "grid grid-cols-12 gap-4 items-center px-4 py-3 border-b border-border/30 transition-all duration-150 group hover:bg-muted/30 cursor-pointer",
-                    selectedConversationId === conv.id && "bg-violet-500/10 border-l-2 border-l-violet-500"
-                  )}
-                >
-                  <div className="col-span-3 min-w-0">
-                    <h4 className="text-sm font-semibold truncate">{conv.name}</h4>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{conv.description || "No description"}</p>
-                  </div>
-                  <div className="col-span-2 text-center">
-                    {conv.is_active ? (
-                      <Badge className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[9px] h-5">
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-[9px] h-5">Inactive</Badge>
-                    )}
-                  </div>
-                  <div className="col-span-2 text-center text-xs text-muted-foreground">
-                    {conv.target_type === "contact" ? (
-                      <span className="flex items-center justify-center gap-1">
-                        <Users className="w-3 h-3" /> Contact
-                      </span>
-                    ) : (
-                      <span className="flex items-center justify-center gap-1">
-                        <Layers className="w-3 h-3" /> List
-                      </span>
-                    )}
-                  </div>
-                  <div className="col-span-2 text-center text-xs font-medium text-foreground">
-                    {conv.step_count || 0} steps
-                  </div>
-                  <div className="col-span-2 text-center text-xs text-muted-foreground">
-                    {conv.created_at ? new Date(conv.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"}
-                  </div>
-                  <div className="col-span-1 flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm("Delete this conversation?")) {
-                          deleteMutation.mutate(conv.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-16">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <p className="text-[11px] text-muted-foreground">Loading conversations</p>
                 </div>
-              ))}
+              ) : filteredConversations.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-1 py-16 text-center">
+                  <Bot className="mb-1 h-4 w-4 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">
+                    {conversations.length === 0 ? "No conversation flows yet" : "No flows match that search"}
+                  </p>
+                </div>
+              ) : (
+                filteredConversations.map((conv) => (
+                  <div
+                    key={conv.id}
+                    onClick={() => setSelectedConversationId(conv.id)}
+                    className={cn(
+                      "grid cursor-pointer grid-cols-12 items-center gap-2 border-b border-border/60 px-3 py-2 last:border-0 hover:bg-muted/30",
+                      selectedConversationId === conv.id && "bg-primary/5",
+                    )}
+                  >
+                    <div className="col-span-4 min-w-0">
+                      <p className="truncate text-sm font-medium">{conv.name}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{conv.description || "No description"}</p>
+                    </div>
+                    <div className="col-span-2 flex justify-center">
+                      <StatusPill label={conv.is_active ? "Active" : "Paused"} tone={conv.is_active ? "success" : "muted"} />
+                    </div>
+                    <div className="col-span-2 truncate text-center text-xs text-muted-foreground">
+                      {conv.target_type === "contact" ? conv.target_phone || "Contact" : listTitle(conv.target_list_id)}
+                    </div>
+                    <div className="col-span-1 text-center text-xs tabular-nums">{conv.step_count || 0}</div>
+                    <div className="col-span-2 text-center text-[11px] tabular-nums text-muted-foreground">
+                      {conv.created_at
+                        ? new Date(conv.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+                        : "—"}
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("Delete this conversation?")) deleteMutation.mutate(conv.id);
+                        }}
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          )}
-          </div>
           </div>
         </main>
 
-        {/* Right Panel: Conversation Builder (when selected) */}
-        {selectedConversationId !== null && (
-          <aside className="min-h-0 w-full shrink-0 overflow-y-auto border-t bg-muted/20 p-3 sm:p-6 lg:w-[min(100%,28rem)] lg:border-l lg:border-t-0">
+        {selectedConversationId != null ? (
+          <aside className="flex max-h-[48dvh] min-h-0 w-full shrink-0 flex-col border-t bg-card lg:max-h-none lg:w-[min(100%,24rem)] lg:border-l lg:border-t-0">
             {detailLoading ? (
-              <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin" /></div>
+              <div className="flex flex-col items-center justify-center gap-2 py-16">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <p className="text-[11px] text-muted-foreground">Loading flow</p>
+              </div>
             ) : conversationDetail ? (
-            <div className="max-w-4xl space-y-6">
-              {/* Conversation Header */}
-              <div className="flex items-start justify-between gap-4 p-4 bg-card/50 rounded-xl border border-border">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h2 className="text-xl font-bold">{conversationDetail.name}</h2>
+              <>
+                <div className="shrink-0 space-y-2 border-b p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-semibold tracking-tight">{conversationDetail.name}</h3>
+                      <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+                        {conversationDetail.description || "No description"}
+                      </p>
+                    </div>
                     <Button
                       variant="ghost"
-                      size="sm"
-                      onClick={() => updateMutation.mutate({
-                        id: conversationDetail.id,
-                        data: { is_active: !conversationDetail.is_active }
-                      })}
-                      className="h-7"
+                      size="icon"
+                      className="h-7 w-7 shrink-0 text-muted-foreground"
+                      onClick={() => setSelectedConversationId(null)}
                     >
-                      {conversationDetail.is_active ? (
-                        <>
-                          <Pause className="w-3.5 h-3.5 mr-1.5" /> Pause
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3.5 h-3.5 mr-1.5" /> Activate
-                        </>
-                      )}
+                      <X className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-3">{conversationDetail.description || "No description"}</p>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>Target: {conversationDetail.target_type === "contact" ? conversationDetail.target_phone : `List #${conversationDetail.target_list_id}`}</span>
-                    {conversationDetail.initial_scheduled_time && (
-                      <span>Starts: {new Date(conversationDetail.initial_scheduled_time).toLocaleString()}</span>
-                    )}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusPill
+                      label={conversationDetail.is_active ? "Active" : "Paused"}
+                      tone={conversationDetail.is_active ? "success" : "muted"}
+                    />
+                    <span className="text-[11px] text-muted-foreground">
+                      {conversationDetail.target_type === "contact"
+                        ? conversationDetail.target_phone || "Contact"
+                        : listTitle(conversationDetail.target_list_id)}
+                    </span>
+                  </div>
+                  {conversationDetail.initial_scheduled_time ? (
+                    <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <Calendar className="h-3 w-3" />
+                      Starts {new Date(conversationDetail.initial_scheduled_time).toLocaleString()}
+                    </p>
+                  ) : null}
+                  <div className="flex gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={() =>
+                        updateMutation.mutate({
+                          id: conversationDetail.id,
+                          data: { is_active: !conversationDetail.is_active },
+                        })
+                      }
+                    >
+                      {conversationDetail.is_active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                      {conversationDetail.is_active ? "Pause" : "Activate"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8"
+                      onClick={() => {
+                        const maxOrder = Math.max(...conversationDetail.steps.map((s) => s.step_order), -1);
+                        setEditingStep({
+                          step_order: maxOrder + 1,
+                          message_content: "",
+                          delay_after_seconds: 0,
+                        });
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Step
+                    </Button>
                   </div>
                 </div>
-              </div>
 
-              {/* Steps */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Steps</h3>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      const maxOrder = Math.max(...(conversationDetail.steps.map(s => s.step_order) || [0]), -1);
-                      setEditingStep({
-                        step_order: maxOrder + 1,
-                        message_content: "",
-                        delay_after_seconds: 0,
-                      });
-                    }}
-                    className="gap-2"
-                  >
-                    <Plus className="w-4 h-4" /> Add Step
-                  </Button>
-                </div>
+                <div className="chat-scroll min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                  {conversationDetail.steps.length === 0 ? (
+                    <p className="py-8 text-center text-xs text-muted-foreground">No steps yet</p>
+                  ) : (
+                    [...conversationDetail.steps]
+                      .sort((a, b) => a.step_order - b.step_order)
+                      .map((step) => {
+                        const stepTriggers = conversationDetail.triggers.filter((t) => t.from_step_id === step.id);
+                        return (
+                          <div key={step.id} className="card-soft p-3">
+                            <div className="flex items-start gap-2">
+                              <span className="mt-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[10px] font-semibold tabular-nums text-primary">
+                                {step.step_order}
+                              </span>
+                              <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed">{step.message_content}</p>
+                              <div className="flex shrink-0 gap-0.5">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => setEditingStep(step)}>
+                                  <Edit3 className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                  onClick={() => {
+                                    if (confirm("Delete this step?")) {
+                                      deleteStepMutation.mutate({ convId: conversationDetail.id, stepId: step.id! });
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                            {formatDelay(step.delay_after_seconds) ? (
+                              <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <Timer className="h-3 w-3" />
+                                Wait {formatDelay(step.delay_after_seconds)} after this step
+                              </p>
+                            ) : null}
 
-                <div className="space-y-3">
-                  {conversationDetail.steps
-                    .sort((a, b) => a.step_order - b.step_order)
-                    .map((step) => (
-                      <div key={step.id} className="p-4 bg-card/50 rounded-xl border border-border">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Badge className="bg-violet-500/20 text-violet-700 dark:text-violet-300">
-                                Step {step.step_order}
-                              </Badge>
-                              {step.delay_after_seconds > 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  Delay: {step.delay_after_seconds}s
+                            <div className="mt-2 border-t border-border/60 pt-2">
+                              <div className="mb-1.5 flex items-center justify-between">
+                                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  Triggers
                                 </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-1.5 text-[11px]"
+                                  onClick={() => {
+                                    setEditingTrigger({
+                                      from_step_id: step.id!,
+                                      to_step_id:
+                                        conversationDetail.steps.find((s) => s.step_order > step.step_order)?.id ||
+                                        step.id!,
+                                      trigger_type: "keyword",
+                                      trigger_value: [],
+                                    });
+                                  }}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  Add
+                                </Button>
+                              </div>
+                              {stepTriggers.length === 0 ? (
+                                <p className="text-[11px] text-muted-foreground">No triggers</p>
+                              ) : (
+                                <div className="space-y-1">
+                                  {stepTriggers.map((trigger) => {
+                                    const toStep = conversationDetail.steps.find((s) => s.id === trigger.to_step_id);
+                                    return (
+                                      <div
+                                        key={trigger.id}
+                                        className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1.5 text-[11px]"
+                                      >
+                                        <span className="min-w-0 flex-1 truncate">{triggerLabel(trigger)}</span>
+                                        <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                        <span className="shrink-0 tabular-nums text-muted-foreground">
+                                          Step {toStep?.step_order ?? "?"}
+                                        </span>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+                                          onClick={() => {
+                                            if (confirm("Delete this trigger?")) {
+                                              deleteTriggerMutation.mutate({
+                                                convId: conversationDetail.id,
+                                                triggerId: trigger.id!,
+                                              });
+                                            }
+                                          }}
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               )}
                             </div>
-                            <p className="text-sm whitespace-pre-wrap">{step.message_content}</p>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => setEditingStep(step)}
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive"
-                              onClick={() => {
-                                if (confirm("Delete this step?")) {
-                                  deleteStepMutation.mutate({ convId: conversationDetail.id, stepId: step.id! });
-                                }
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Triggers for this step */}
-                        <div className="mt-3 pt-3 border-t border-border/50">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold text-muted-foreground">Triggers → Next Step</span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 text-xs"
-                              onClick={() => {
-                                setEditingTrigger({
-                                  from_step_id: step.id!,
-                                  to_step_id: conversationDetail.steps.find(s => s.step_order > step.step_order)?.id || step.id!,
-                                  trigger_type: "keyword",
-                                  trigger_value: [],
-                                });
-                              }}
-                            >
-                              <Plus className="w-3 h-3 mr-1" /> Add Trigger
-                            </Button>
-                          </div>
-                          <div className="space-y-1.5">
-                            {conversationDetail.triggers
-                              .filter(t => t.from_step_id === step.id)
-                              .map((trigger) => {
-                                const toStep = conversationDetail.steps.find(s => s.id === trigger.to_step_id);
-                                return (
-                                  <div key={trigger.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg text-xs">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium">
-                                        {trigger.trigger_type === "any" && "Any message"}
-                                        {trigger.trigger_type === "keyword" && `Keywords: ${Array.isArray(trigger.trigger_value) ? trigger.trigger_value.join(", ") : trigger.trigger_value}`}
-                                        {trigger.trigger_type === "exact" && `Exact: "${trigger.trigger_value}"`}
-                                        {trigger.trigger_type === "contains" && `Contains: "${trigger.trigger_value}"`}
-                                        {trigger.trigger_type === "regex" && `Regex: ${trigger.trigger_value}`}
-                                      </span>
-                                      <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                                      <span className="text-muted-foreground">Step {toStep?.step_order || "?"}</span>
-                                    </div>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6 text-destructive"
-                                      onClick={() => {
-                                        if (confirm("Delete this trigger?")) {
-                                          deleteTriggerMutation.mutate({ convId: conversationDetail.id, triggerId: trigger.id! });
-                                        }
-                                      }}
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </Button>
-                                  </div>
-                                );
-                              })}
-                            {conversationDetail.triggers.filter(t => t.from_step_id === step.id).length === 0 && (
-                              <p className="text-xs text-muted-foreground italic">No triggers yet</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })
+                  )}
                 </div>
-              </div>
-            </div>
+              </>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>Conversation not found</p>
+              <div className="flex flex-col items-center justify-center gap-1 py-16 text-center">
+                <MessageSquare className="mb-1 h-4 w-4 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">Conversation not found</p>
               </div>
             )}
           </aside>
-        )}
+        ) : null}
       </div>
 
-      {/* Create Conversation Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader className="pb-4 border-b border-border">
-            <DialogTitle className="text-2xl font-bold">Create New Conversation</DialogTitle>
-            <DialogDescription className="text-sm">Set up an automated message flow with multiple steps</DialogDescription>
+      <Dialog
+        open={showCreateDialog}
+        onOpenChange={(open) => {
+          setShowCreateDialog(open);
+          if (open) setNewConvCountryCode(prefs.default_country_code);
+          if (!open) resetCreateForm();
+        }}
+      >
+        <DialogContent className="flex max-h-[min(90dvh,100%)] max-w-lg flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>New conversation</DialogTitle>
+            <DialogDescription>Create an automated message flow with steps and delays.</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-6 p-1 custom-scrollbar">
-            {/* Use Existing Conversation Option */}
-            <div className="p-4 bg-muted/30 rounded-xl border border-border">
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-sm font-semibold flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-violet-500" />
-                  Use Existing Conversation Template
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUseExistingConversation(!useExistingConversation);
-                    if (useExistingConversation) {
-                      setSelectedConversationTemplateId("");
-                      setCreateSteps([{ message_content: "", delay_after_seconds: 0, delay_unit: "seconds", step_order: 0 }]);
-                    }
-                  }}
-                  className={cn(
-                    "relative w-11 h-6 rounded-full transition-all flex items-center px-0.5 shrink-0",
-                    useExistingConversation ? "bg-violet-500" : "bg-muted"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "block w-5 h-5 bg-white rounded-full transition-transform shadow",
-                      useExistingConversation ? "translate-x-5" : "translate-x-0.5"
-                    )}
-                  />
-                </button>
+
+          <div className="chat-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+            <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+              <div>
+                <p className="text-xs font-medium">Copy an existing flow</p>
+                <p className="text-[11px] text-muted-foreground">Reuse steps from another conversation</p>
               </div>
-              {useExistingConversation && (
-                <Select value={selectedConversationTemplateId} onValueChange={async (val) => {
+              <Switch
+                checked={useExistingConversation}
+                onCheckedChange={(checked) => {
+                  setUseExistingConversation(checked);
+                  if (!checked) {
+                    setSelectedConversationTemplateId("");
+                    setCreateSteps([{ message_content: "", delay_after_seconds: 0, delay_unit: "seconds", step_order: 0 }]);
+                  }
+                }}
+              />
+            </div>
+
+            {useExistingConversation ? (
+              <Select
+                value={selectedConversationTemplateId}
+                onValueChange={async (val) => {
                   setSelectedConversationTemplateId(val);
-                  if (val) {
-                    try {
-                      const templateConv = await api.conversations.get(parseInt(val));
-                      if (templateConv && templateConv.steps) {
-                        setCreateSteps(templateConv.steps.map((s: ConversationStep, idx: number) => ({
+                  if (!val) return;
+                  try {
+                    const templateConv = await api.conversations.get(parseInt(val, 10));
+                    if (templateConv?.steps) {
+                      setCreateSteps(
+                        templateConv.steps.map((s: ConversationStep, idx: number) => ({
                           message_content: s.message_content,
                           delay_after_seconds: s.delay_after_seconds || 0,
                           delay_unit: "seconds" as const,
                           step_order: idx,
-                        })));
-                        setNewConvName(templateConv.name + " (Copy)");
-                        setNewConvDescription(templateConv.description || "");
-                        toast.success(`Loaded ${templateConv.steps.length} steps from template`);
-                      }
-                    } catch (err) {
-                      toast.error("Failed to load conversation template");
+                        })),
+                      );
+                      setNewConvName(`${templateConv.name} (Copy)`);
+                      setNewConvDescription(templateConv.description || "");
+                      toast.success(`Loaded ${templateConv.steps.length} steps`);
                     }
+                  } catch {
+                    toast.error("Failed to load conversation template");
                   }
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select conversation template..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border z-[200]" style={{ zIndex: 9999 }}>
-                    {conversations.map((conv) => (
-                      <SelectItem key={conv.id} value={String(conv.id)}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>{conv.name}</span>
-                          <Badge variant="outline" className="ml-2 text-[9px]">
-                            {conv.step_count || 0} steps
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+                }}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Choose a flow to copy" />
+                </SelectTrigger>
+                <SelectContent className="z-[400]">
+                  {conversations.map((conv) => (
+                    <SelectItem key={conv.id} value={String(conv.id)}>
+                      {conv.name}
+                      <span className="ml-2 text-muted-foreground">{conv.step_count || 0} steps</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
 
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">Name</label>
+            <div className="space-y-1">
+              <label className={fieldLabel}>Name</label>
               <Input
                 value={newConvName}
                 onChange={(e) => setNewConvName(e.target.value)}
-                placeholder="e.g. Order Follow-up"
-                disabled={useExistingConversation && selectedConversationTemplateId !== ""}
+                placeholder="e.g. Order follow-up"
+                className="h-9"
               />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">Description</label>
+            <div className="space-y-1">
+              <label className={fieldLabel}>Description</label>
               <Textarea
                 value={newConvDescription}
                 onChange={(e) => setNewConvDescription(e.target.value)}
-                placeholder="Describe this conversation flow..."
-                rows={3}
+                placeholder="What this flow does"
+                rows={2}
+                className="min-h-[64px]"
               />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">Target</label>
-              <Select value={newConvTargetType} onValueChange={(v) => setNewConvTargetType(v as "contact" | "list")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border z-[200]" style={{ zIndex: 9999 }}>
-                  <SelectItem value="contact">Single Contact</SelectItem>
-                  <SelectItem value="list">List</SelectItem>
-                </SelectContent>
-              </Select>
+
+            <div className="space-y-2">
+              <label className={fieldLabel}>Target</label>
+              <div className="flex rounded-md border bg-muted/30 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setNewConvTargetType("contact")}
+                  className={cn(
+                    "h-8 flex-1 rounded-md text-xs font-medium",
+                    newConvTargetType === "contact" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+                  )}
+                >
+                  <User className="mr-1 inline h-3.5 w-3.5" />
+                  Contact
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewConvTargetType("list")}
+                  className={cn(
+                    "h-8 flex-1 rounded-md text-xs font-medium",
+                    newConvTargetType === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+                  )}
+                >
+                  <Layers className="mr-1 inline h-3.5 w-3.5" />
+                  List
+                </button>
+              </div>
+
               {newConvTargetType === "contact" ? (
-                <div className="mt-2 space-y-2">
-                  <div className="flex bg-secondary/50 p-1 rounded-lg border border-border">
+                <div className="space-y-2">
+                  <div className="flex rounded-md border bg-muted/30 p-0.5">
                     <button
                       type="button"
-                      onClick={() => { setUseExistingContact(false); setSelectedContactId(""); }}
+                      onClick={() => {
+                        setUseExistingContact(false);
+                        setSelectedContactId("");
+                      }}
                       className={cn(
-                        "flex-1 py-2 rounded-md text-xs font-semibold transition-all",
-                        !useExistingContact
-                          ? "bg-background text-primary shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
+                        "h-8 flex-1 rounded-md text-xs font-medium",
+                        !useExistingContact ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
                       )}
                     >
-                      <User className="w-3.5 h-3.5 inline mr-1.5" /> New Number
+                      New number
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setUseExistingContact(true); setNewConvTargetPhone(""); setContactSearch(""); }}
+                      onClick={() => {
+                        setUseExistingContact(true);
+                        setNewConvTargetPhone("");
+                        setContactSearch("");
+                      }}
                       className={cn(
-                        "flex-1 py-2 rounded-md text-xs font-semibold transition-all",
-                        useExistingContact
-                          ? "bg-background text-primary shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
+                        "h-8 flex-1 rounded-md text-xs font-medium",
+                        useExistingContact ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
                       )}
                     >
-                      <Users className="w-3.5 h-3.5 inline mr-1.5" /> Existing Contact
+                      Existing
                     </button>
                   </div>
                   {useExistingContact ? (
                     <Select value={selectedContactId} onValueChange={setSelectedContactId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={contactsLoading ? "Loading contacts..." : contacts.length === 0 ? "No contacts available" : "Choose a contact..."} />
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue
+                          placeholder={
+                            contactsLoading ? "Loading…" : contacts.length === 0 ? "No contacts" : "Choose a contact"
+                          }
+                        />
                       </SelectTrigger>
-                      <SelectContent className="bg-popover border-border z-[200]" style={{ zIndex: 9999 }}>
+                      <SelectContent className="z-[400]">
                         {contactsLoading ? (
-                          <div className="px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Loading contacts...
+                          <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Loading
                           </div>
                         ) : contacts.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-muted-foreground">
-                            No contacts found. Add contacts in the Contacts section first.
-                          </div>
+                          <div className="px-3 py-2 text-xs text-muted-foreground">Add contacts first.</div>
                         ) : (
                           <>
-                            <div className="p-2 border-b border-border/60 sticky top-0 bg-popover z-10">
+                            <div className="sticky top-0 border-b bg-popover p-2">
                               <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                                 <Input
                                   value={contactSearch}
                                   onChange={(e) => setContactSearch(e.target.value)}
-                                  placeholder="Search by name or number..."
-                                  className="h-9 pl-10 pr-9 bg-background rounded-lg font-medium text-sm"
+                                  placeholder="Search contacts"
+                                  className="h-8 pl-8 text-xs"
                                 />
-                                {contactSearch && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setContactSearch("")}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                )}
                               </div>
                             </div>
                             {filteredContacts.length === 0 ? (
-                              <div className="px-4 py-3 text-sm text-muted-foreground">
-                                No matching contacts.
-                              </div>
+                              <div className="px-3 py-2 text-xs text-muted-foreground">No matches</div>
                             ) : (
-                              filteredContacts.map((contact: any) => (
-                                <SelectItem
-                                  key={contact.id}
-                                  value={String(contact.id)}
-                                  className="font-medium text-sm cursor-pointer"
-                                >
-                                  <div className="flex items-center justify-between w-full">
-                                    <div className="flex flex-col">
-                                      <span className="font-semibold">{contact.name || "Unknown"}</span>
-                                      <span className="text-xs text-muted-foreground">{contact.phone}</span>
-                                    </div>
-                                  </div>
+                              filteredContacts.map((contact: Contact) => (
+                                <SelectItem key={contact.id} value={String(contact.id)} className="text-xs">
+                                  <span className="font-medium">{contact.name || "Unknown"}</span>
+                                  <span className="ml-2 text-muted-foreground">{contact.phone}</span>
                                 </SelectItem>
                               ))
                             )}
@@ -724,223 +813,186 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Input
-                      value={newConvTargetPhone}
-                      onChange={(e) => setNewConvTargetPhone(e.target.value)}
-                      placeholder="Phone number"
+                    <PhoneField
+                      countryCode={newConvCountryCode}
+                      nationalNumber={newConvTargetPhone}
+                      onCountryCodeChange={setNewConvCountryCode}
+                      onNationalNumberChange={setNewConvTargetPhone}
                     />
-                  )}
-                  {(useExistingContact && selectedContactId) && (
-                    <p className="text-xs text-muted-foreground">
-                      {contacts.find((c: any) => String(c.id) === selectedContactId)?.phone || ""}
-                    </p>
                   )}
                 </div>
               ) : (
                 <Select value={newConvTargetListId} onValueChange={setNewConvTargetListId}>
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Select list" />
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder={lists.length === 0 ? "No lists" : "Choose a list"} />
                   </SelectTrigger>
-                  <SelectContent className="bg-popover border-border z-[200]" style={{ zIndex: 9999 }}>
-                    {lists.map((l) => (
+                  <SelectContent className="z-[400]">
+                    {lists.map((l: LeadList) => (
                       <SelectItem key={l.id} value={String(l.id)}>
-                        {l.title} ({l.count} contacts)
+                        {l.title}
+                        <span className="ml-2 text-muted-foreground">{l.count || 0}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block flex items-center gap-2">
-                  <Calendar className="w-4 h-4" /> Start Date
-                </label>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className={fieldLabel}>Start date</label>
                 <DateField
-                  value={newConvScheduledTime ? newConvScheduledTime.split('T')[0] : ""}
+                  value={newConvScheduledTime ? newConvScheduledTime.split("T")[0] : ""}
                   onChange={(date) => {
-                    const time = newConvScheduledTime.includes('T') ? newConvScheduledTime.split('T')[1] : "09:00";
+                    const time = newConvScheduledTime.includes("T") ? newConvScheduledTime.split("T")[1] : "09:00";
                     setNewConvScheduledTime(date ? `${date}T${time}` : "");
                   }}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={new Date().toISOString().split("T")[0]}
+                  size="sm"
+                  allowClear
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block flex items-center gap-2">
-                  <Clock className="w-4 h-4" /> Start Time
-                </label>
+              <div className="space-y-1">
+                <label className={fieldLabel}>Start time</label>
                 <TimeField
-                  value={newConvScheduledTime && newConvScheduledTime.includes('T') ? newConvScheduledTime.split('T')[1] : "09:00"}
+                  value={
+                    newConvScheduledTime && newConvScheduledTime.includes("T")
+                      ? newConvScheduledTime.split("T")[1]
+                      : "09:00"
+                  }
                   onChange={(time) => {
-                    const date = newConvScheduledTime.split('T')[0] || new Date().toISOString().split('T')[0];
+                    const date = newConvScheduledTime.split("T")[0] || new Date().toISOString().split("T")[0];
                     setNewConvScheduledTime(`${date}T${time}`);
                   }}
                 />
               </div>
             </div>
 
-            {/* Steps Section */}
-            <div className="space-y-4 pt-4 border-t border-border">
+            <div className="space-y-2 border-t pt-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-violet-500" />
-                    Conversation Steps
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">Add messages that will be sent in sequence</p>
+                  <h3 className="text-sm font-semibold tracking-tight">Steps</h3>
+                  <p className="text-[11px] text-muted-foreground">Messages sent in order</p>
                 </div>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setCreateSteps([...createSteps, {
-                      message_content: "",
-                      delay_after_seconds: 0,
-                      delay_unit: "seconds",
-                      step_order: createSteps.length
-                    }]);
-                  }}
-                  className="gap-2"
+                  className="h-8"
+                  onClick={() =>
+                    setCreateSteps([
+                      ...createSteps,
+                      {
+                        message_content: "",
+                        delay_after_seconds: 0,
+                        delay_unit: "seconds",
+                        step_order: createSteps.length,
+                      },
+                    ])
+                  }
                 >
-                  <Plus className="w-4 h-4" /> Add Step
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
                 </Button>
               </div>
 
-              <div className="space-y-4">
-                {createSteps.map((step, index) => (
-                  <div key={index} className="p-4 bg-card/50 rounded-xl border border-border space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-violet-500/20 text-violet-700 dark:text-violet-300">
-                          Step {index + 1}
-                        </Badge>
-                        {index > 0 && createSteps[index - 1].delay_after_seconds > 0 && (
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Timer className="w-3 h-3" />
-                            {createSteps[index - 1].delay_after_seconds}s delay after step {index}
-                          </span>
-                        )}
-                      </div>
-                      {createSteps.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
-                          onClick={() => {
-                            setCreateSteps(createSteps.filter((_, i) => i !== index).map((s, i) => ({ ...s, step_order: i })));
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1">
-                        <Textarea
-                          value={step.message_content}
-                          onChange={(e) => {
-                            const updated = [...createSteps];
-                            updated[index].message_content = e.target.value;
-                            setCreateSteps(updated);
-                          }}
-                          placeholder="Enter message content..."
-                          rows={4}
-                          className="resize-none"
-                        />
-                      </div>
+              {createSteps.map((step, index) => (
+                <div key={index} className="card-soft space-y-2 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-muted-foreground">Step {index + 1}</span>
+                    {createSteps.length > 1 ? (
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="icon"
-                        className="h-10 w-10 shrink-0"
-                        onClick={() => {
-                          setSelectedStepForTemplate(index);
-                          setShowTemplateLibrary(true);
-                        }}
-                        title="Select from templates"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() =>
+                          setCreateSteps(createSteps.filter((_, i) => i !== index).map((s, i) => ({ ...s, step_order: i })))
+                        }
                       >
-                        <Library className="w-4 h-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    </div>
-                    {index < createSteps.length - 1 && (
-                      <div className="flex items-center gap-3 pt-3 border-t border-border/50 bg-muted/20 p-3 rounded-lg">
-                        <label className="text-xs font-semibold text-foreground flex items-center gap-2 shrink-0">
-                          <Timer className="w-3.5 h-3.5 text-violet-500" />
-                          Delay after this step:
-                        </label>
-                        <div className="flex items-center gap-2 flex-1">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={step.delay_after_seconds}
-                            onChange={(e) => {
-                              const updated = [...createSteps];
-                              updated[index].delay_after_seconds = Math.max(0, parseInt(e.target.value, 10) || 0);
-                              setCreateSteps(updated);
-                            }}
-                            className="w-24 h-9 text-sm font-medium"
-                            placeholder="0"
-                          />
-                          <Select
-                            value={step.delay_unit || "seconds"}
-                            onValueChange={(v: "seconds" | "minutes" | "hours" | "days" | "months") => {
-                              const updated = [...createSteps];
-                              updated[index].delay_unit = v;
-                              setCreateSteps(updated);
-                            }}
-                          >
-                            <SelectTrigger className="w-32 h-9 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-popover border-border z-[200]" style={{ zIndex: 9999 }}>
-                              <SelectItem value="seconds">Seconds</SelectItem>
-                              <SelectItem value="minutes">Minutes</SelectItem>
-                              <SelectItem value="hours">Hours</SelectItem>
-                              <SelectItem value="days">Days</SelectItem>
-                              <SelectItem value="months">Months</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {step.delay_after_seconds > 0 && (
-                            <span className="text-xs text-violet-600 dark:text-violet-400 font-semibold ml-2">
-                              {(() => {
-                                const totalSeconds = step.delay_unit === "seconds" ? step.delay_after_seconds
-                                  : step.delay_unit === "minutes" ? step.delay_after_seconds * 60
-                                  : step.delay_unit === "hours" ? step.delay_after_seconds * 3600
-                                  : step.delay_unit === "days" ? step.delay_after_seconds * 86400
-                                  : step.delay_after_seconds * 2592000;
-                                const days = Math.floor(totalSeconds / 86400);
-                                const hours = Math.floor((totalSeconds % 86400) / 3600);
-                                const minutes = Math.floor((totalSeconds % 3600) / 60);
-                                const seconds = totalSeconds % 60;
-                                const parts = [];
-                                if (days > 0) parts.push(`${days}d`);
-                                if (hours > 0) parts.push(`${hours}h`);
-                                if (minutes > 0) parts.push(`${minutes}m`);
-                                if (seconds > 0 && days === 0) parts.push(`${seconds}s`);
-                                return `(${parts.join(" ")})`;
-                              })()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                    ) : null}
                   </div>
-                ))}
-              </div>
+                  <div className="flex items-start gap-1.5">
+                    <Textarea
+                      value={step.message_content}
+                      onChange={(e) => {
+                        const updated = [...createSteps];
+                        updated[index].message_content = e.target.value;
+                        setCreateSteps(updated);
+                      }}
+                      placeholder="Message content"
+                      rows={3}
+                      className="min-h-[72px] resize-none"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      title="Insert template"
+                      onClick={() => {
+                        setSelectedStepForTemplate(index);
+                        setShowTemplateLibrary(true);
+                      }}
+                    >
+                      <Library className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  {index < createSteps.length - 1 ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-[11px] text-muted-foreground">Then wait</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={step.delay_after_seconds}
+                        onChange={(e) => {
+                          const updated = [...createSteps];
+                          updated[index].delay_after_seconds = Math.max(0, parseInt(e.target.value, 10) || 0);
+                          setCreateSteps(updated);
+                        }}
+                        className="h-8 w-16 text-xs"
+                      />
+                      <Select
+                        value={step.delay_unit || "seconds"}
+                        onValueChange={(v: DelayUnit) => {
+                          const updated = [...createSteps];
+                          updated[index].delay_unit = v;
+                          setCreateSteps(updated);
+                        }}
+                      >
+                        <SelectTrigger className="h-8 w-[7.5rem] text-[11px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="z-[400]">
+                          <SelectItem value="seconds">Seconds</SelectItem>
+                          <SelectItem value="minutes">Minutes</SelectItem>
+                          <SelectItem value="hours">Hours</SelectItem>
+                          <SelectItem value="days">Days</SelectItem>
+                          <SelectItem value="months">Months</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {step.delay_after_seconds > 0 ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          ({formatDelay(delayToSeconds(step.delay_after_seconds, step.delay_unit || "seconds"))})
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </div>
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-border bg-card/50 px-1 -mx-1">
-            <Button variant="secondary" onClick={() => {
-              setShowCreateDialog(false);
-              setCreateSteps([{ message_content: "", delay_after_seconds: 0, delay_unit: "seconds", step_order: 0 }]);
-              setUseExistingConversation(false);
-              setSelectedConversationTemplateId("");
-            }}>
+
+          <div className="flex justify-end gap-2 border-t pt-3">
+            <Button variant="outline" size="sm" className="h-8" onClick={() => setShowCreateDialog(false)}>
               Cancel
             </Button>
             <Button
+              size="sm"
+              className="h-8"
               onClick={() => createMutation.mutate()}
               disabled={
                 createMutation.isPending ||
@@ -948,192 +1000,175 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
                 (newConvTargetType === "contact" && !useExistingContact && !newConvTargetPhone) ||
                 (newConvTargetType === "contact" && useExistingContact && !selectedContactId) ||
                 (newConvTargetType === "list" && !newConvTargetListId) ||
-                createSteps.filter(s => s.message_content.trim()).length === 0
+                createSteps.filter((s) => s.message_content.trim()).length === 0
               }
-              className="bg-violet-600 hover:bg-violet-700 min-w-[120px]"
             >
-              {createMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Conversation
-                </>
-              )}
+              {createMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Create
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Template Library Dialog */}
       <Dialog open={showTemplateLibrary} onOpenChange={setShowTemplateLibrary}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className="flex max-h-[min(85dvh,100%)] max-w-lg flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-              <Library className="w-5 h-5 text-primary" />
-              Select Template
-            </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              Choose a template to use for step {selectedStepForTemplate !== null ? selectedStepForTemplate + 1 : ""}
+            <DialogTitle>Insert template</DialogTitle>
+            <DialogDescription>
+              Choose a template for step {selectedStepForTemplate != null ? selectedStepForTemplate + 1 : ""}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto custom-scrollbar mt-4">
+          <div className="chat-scroll min-h-0 flex-1 space-y-2 overflow-y-auto">
             {templates.length === 0 ? (
-              <div className="text-center py-12 text-sm text-muted-foreground">
-                <Library className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p className="font-medium">No templates available</p>
-                <p className="text-xs mt-1">Create templates in the Templates section to use them here.</p>
+              <div className="flex flex-col items-center justify-center gap-1 py-12 text-center">
+                <Library className="mb-1 h-4 w-4 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">No templates yet. Create some in Templates.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4">
-                {templates.map(t => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => {
-                      if (selectedStepForTemplate !== null) {
-                        const updated = [...createSteps];
-                        updated[selectedStepForTemplate].message_content = t.body;
-                        setCreateSteps(updated);
-                        setShowTemplateLibrary(false);
-                        setSelectedStepForTemplate(null);
-                        toast.success(`Template "${t.title}" added to step ${selectedStepForTemplate + 1}`);
-                      }
-                    }}
-                    className="group p-5 bg-card/50 border border-border/50 rounded-xl text-left hover:border-primary/50 hover:bg-card/80 hover:shadow-lg transition-all duration-200"
-                  >
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <h4 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
-                        {t.title}
-                      </h4>
-                      {t.category && (
-                        <Badge variant="outline" className="text-[10px] h-5 shrink-0">
-                          {t.category}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3 group-hover:text-foreground/80 transition-colors">
-                      "{t.body}"
-                    </p>
-                    <div className="mt-3 flex items-center gap-2 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                      <ArrowRight className="w-3.5 h-3.5" />
-                      <span className="font-medium">Click to use this template</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              templates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    if (selectedStepForTemplate == null) return;
+                    const updated = [...createSteps];
+                    updated[selectedStepForTemplate].message_content = t.body;
+                    setCreateSteps(updated);
+                    setShowTemplateLibrary(false);
+                    setSelectedStepForTemplate(null);
+                    toast.success(`Added “${t.title}”`);
+                  }}
+                  className="card-soft w-full p-3 text-left hover:bg-muted/40"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium">{t.title}</p>
+                    {t.category ? <StatusPill label={t.category} tone="muted" /> : null}
+                  </div>
+                  <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">{t.body}</p>
+                </button>
+              ))
             )}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Step Dialog */}
       <Dialog open={editingStep !== null} onOpenChange={(open) => !open && setEditingStep(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Step</DialogTitle>
+            <DialogTitle>{editingStep?.id ? "Edit step" : "Add step"}</DialogTitle>
           </DialogHeader>
-          {editingStep && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Message</label>
+          {editingStep ? (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className={fieldLabel}>Message</label>
                 <Textarea
                   value={editingStep.message_content}
                   onChange={(e) => setEditingStep({ ...editingStep, message_content: e.target.value })}
                   rows={5}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Delay After Trigger (seconds)</label>
+              <div className="space-y-1">
+                <label className={fieldLabel}>Delay after this step (seconds)</label>
                 <Input
                   type="number"
                   min={0}
+                  className="h-9"
                   value={editingStep.delay_after_seconds || 0}
-                  onChange={(e) => setEditingStep({ ...editingStep, delay_after_seconds: parseInt(e.target.value, 10) || 0 })}
+                  onChange={(e) =>
+                    setEditingStep({ ...editingStep, delay_after_seconds: parseInt(e.target.value, 10) || 0 })
+                  }
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button variant="secondary" onClick={() => setEditingStep(null)}>Cancel</Button>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" className="h-8" onClick={() => setEditingStep(null)}>
+                  Cancel
+                </Button>
                 <Button
+                  size="sm"
+                  className="h-8"
                   onClick={() => {
                     if (editingStep.id) {
-                      // Update existing
                       api.conversations.updateStep(selectedConversationId!, editingStep.id, editingStep).then(() => {
                         queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversationId] });
                         setEditingStep(null);
                         toast.success("Step updated");
                       });
                     } else {
-                      // Add new
                       addStepMutation.mutate({ convId: selectedConversationId!, step: editingStep });
                     }
                   }}
-                  className="bg-violet-600 hover:bg-violet-700"
                 >
                   Save
                 </Button>
               </div>
             </div>
-          )}
+          ) : null}
         </DialogContent>
       </Dialog>
 
-      {/* Edit Trigger Dialog */}
       <Dialog open={editingTrigger !== null} onOpenChange={(open) => !open && setEditingTrigger(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Trigger</DialogTitle>
+            <DialogTitle>{editingTrigger?.id ? "Edit trigger" : "Add trigger"}</DialogTitle>
           </DialogHeader>
-          {editingTrigger && conversationDetail && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Trigger Type</label>
+          {editingTrigger && conversationDetail ? (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className={fieldLabel}>When the reply</label>
                 <Select
                   value={editingTrigger.trigger_type}
-                  onValueChange={(v) => setEditingTrigger({ ...editingTrigger, trigger_type: v as ConversationTriggerType })}
+                  onValueChange={(v) =>
+                    setEditingTrigger({ ...editingTrigger, trigger_type: v as ConversationTriggerType })
+                  }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">Any message</SelectItem>
-                    <SelectItem value="keyword">Keyword(s)</SelectItem>
-                    <SelectItem value="exact">Exact match</SelectItem>
+                  <SelectContent className="z-[400]">
+                    <SelectItem value="any">Is any message</SelectItem>
+                    <SelectItem value="keyword">Matches keyword(s)</SelectItem>
+                    <SelectItem value="exact">Is an exact match</SelectItem>
                     <SelectItem value="contains">Contains text</SelectItem>
-                    <SelectItem value="regex">Regex pattern</SelectItem>
+                    <SelectItem value="regex">Matches regex</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {editingTrigger.trigger_type !== "any" && (
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">
+              {editingTrigger.trigger_type !== "any" ? (
+                <div className="space-y-1">
+                  <label className={fieldLabel}>
                     {editingTrigger.trigger_type === "keyword" ? "Keywords (comma-separated)" : "Value"}
                   </label>
                   <Input
-                    value={Array.isArray(editingTrigger.trigger_value) ? editingTrigger.trigger_value.join(", ") : (editingTrigger.trigger_value || "")}
+                    className="h-9"
+                    value={
+                      Array.isArray(editingTrigger.trigger_value)
+                        ? editingTrigger.trigger_value.join(", ")
+                        : editingTrigger.trigger_value || ""
+                    }
                     onChange={(e) => {
-                      const val = editingTrigger.trigger_type === "keyword"
-                        ? e.target.value.split(",").map(s => s.trim()).filter(Boolean)
-                        : e.target.value;
+                      const val =
+                        editingTrigger.trigger_type === "keyword"
+                          ? e.target.value
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean)
+                          : e.target.value;
                       setEditingTrigger({ ...editingTrigger, trigger_value: val });
                     }}
                     placeholder={editingTrigger.trigger_type === "keyword" ? "hello, hi, hey" : "Enter value"}
                   />
                 </div>
-              )}
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">To Step</label>
+              ) : null}
+              <div className="space-y-1">
+                <label className={fieldLabel}>Go to step</label>
                 <Select
                   value={String(editingTrigger.to_step_id)}
                   onValueChange={(v) => setEditingTrigger({ ...editingTrigger, to_step_id: parseInt(v, 10) })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[400]">
                     {conversationDetail.steps.map((s) => (
                       <SelectItem key={s.id} value={String(s.id)}>
                         Step {s.step_order}
@@ -1142,46 +1177,44 @@ export function ConversationView({ isOpen, onClose }: ConversationViewProps) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+              <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                <label htmlFor="case-sensitive" className="text-xs">
+                  Case sensitive
+                </label>
+                <Switch
                   id="case-sensitive"
                   checked={editingTrigger.is_case_sensitive || false}
-                  onChange={(e) => setEditingTrigger({ ...editingTrigger, is_case_sensitive: e.target.checked })}
-                  className="rounded"
+                  onCheckedChange={(checked) => setEditingTrigger({ ...editingTrigger, is_case_sensitive: checked })}
                 />
-                <label htmlFor="case-sensitive" className="text-sm">Case sensitive</label>
               </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button variant="secondary" onClick={() => setEditingTrigger(null)}>Cancel</Button>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" className="h-8" onClick={() => setEditingTrigger(null)}>
+                  Cancel
+                </Button>
                 <Button
+                  size="sm"
+                  className="h-8"
                   onClick={() => {
                     if (editingTrigger.id) {
-                      api.conversations.updateTrigger(selectedConversationId!, editingTrigger.id, editingTrigger).then(() => {
-                        queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversationId] });
-                        setEditingTrigger(null);
-                        toast.success("Trigger updated");
-                      });
+                      api.conversations
+                        .updateTrigger(selectedConversationId!, editingTrigger.id, editingTrigger)
+                        .then(() => {
+                          queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversationId] });
+                          setEditingTrigger(null);
+                          toast.success("Trigger updated");
+                        });
                     } else {
                       addTriggerMutation.mutate({ convId: selectedConversationId!, trigger: editingTrigger });
                     }
                   }}
-                  className="bg-violet-600 hover:bg-violet-700"
                 >
                   Save
                 </Button>
               </div>
             </div>
-          )}
+          ) : null}
         </DialogContent>
       </Dialog>
-
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary)); }
-      `}</style>
     </div>
   );
 }
