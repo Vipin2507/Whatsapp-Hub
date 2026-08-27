@@ -1,23 +1,69 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  ChevronLeft, Loader2, Upload, FileText, MessageSquare,
-  X, CheckCircle2, ListChecks, ArrowRight, Calendar,
-  Sparkles, AlertCircle, Mic, Link2, Trash2,
+  ChevronLeft,
+  Loader2,
+  Upload,
+  FileText,
+  X,
+  ListChecks,
+  ArrowRight,
+  Calendar,
+  Sparkles,
+  AlertCircle,
+  Mic,
+  Link2,
+  Trash2,
+  Search,
+  CheckCircle2,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, CallReport, CallReportSummary } from "@/lib/api";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { StatusPill } from "@/components/PendingChip";
 
 interface CallAnalysisViewProps {
   isOpen: boolean;
   onClose: () => void;
-  /** When true, render inside main layout (no full-screen overlay) so sidebar stays visible */
   embedded?: boolean;
+}
+
+const fieldLabel = "text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
+const AUDIO_ACCEPT = ".wav,.mp3,.m4a,.ogg,.flac,.aac,.opus,audio/*";
+
+function sentimentTone(value?: string) {
+  const v = (value || "").toLowerCase();
+  if (/(positive|good|happy|satisfied|promising)/.test(v)) return "success" as const;
+  if (/(negative|poor|angry|frustrated|risk)/.test(v)) return "danger" as const;
+  if (/(mixed|neutral|unknown)/.test(v)) return "muted" as const;
+  return "info" as const;
+}
+
+function formatBytes(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDate(iso?: string | null, withTime = false) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return withTime
+    ? d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function bulletLines(text?: string) {
+  if (!text?.trim()) return [];
+  const parts = text
+    .split(/\n+/)
+    .map((line) => line.replace(/^[•\-\*]\s*/, "").trim())
+    .filter(Boolean);
+  return parts.length ? parts : [text.trim()];
 }
 
 export function CallAnalysisView({ isOpen, onClose, embedded = false }: CallAnalysisViewProps) {
@@ -27,6 +73,9 @@ export function CallAnalysisView({ isOpen, onClose, embedded = false }: CallAnal
   const [audioUrl, setAudioUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const [detailTab, setDetailTab] = useState("overview");
 
   const { data: reports = [], isLoading, isError, error: reportsError } = useQuery({
     queryKey: ["call-analysis-reports"],
@@ -39,6 +88,27 @@ export function CallAnalysisView({ isOpen, onClose, embedded = false }: CallAnal
     queryFn: () => api.callAnalysis.getReport(selectedReportId!),
     enabled: isOpen && selectedReportId != null,
   });
+
+  const filteredReports = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return reports;
+    return reports.filter(
+      (r) =>
+        (r.title || "").toLowerCase().includes(q) ||
+        (r.summary || "").toLowerCase().includes(q) ||
+        (r.sentiment || "").toLowerCase().includes(q),
+    );
+  }, [reports, search]);
+
+  const takeFile = (file?: File | null) => {
+    if (!file) return;
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 100MB.");
+      return;
+    }
+    setSelectedFile(file);
+    setInputMode("upload");
+  };
 
   const analyzeMutation = useMutation({
     mutationFn: async () => {
@@ -63,6 +133,7 @@ export function CallAnalysisView({ isOpen, onClose, embedded = false }: CallAnal
       setAudioUrl("");
       setSelectedFile(null);
       setSelectedReportId(data.report.id);
+      setDetailTab("overview");
       toast.success("Call analyzed");
     },
     onError: (e: Error) => {
@@ -93,285 +164,364 @@ export function CallAnalysisView({ isOpen, onClose, embedded = false }: CallAnal
 
   if (!isOpen) return null;
 
+  const canAnalyze = inputMode === "upload" ? Boolean(selectedFile) : Boolean(audioUrl.trim());
+
   return (
-    <div className={embedded ? "flex-1 flex flex-col min-h-0 overflow-hidden bg-background" : "fixed inset-0 z-[100] flex flex-col bg-background"}>
+    <div
+      className={
+        embedded
+          ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+          : "app-overlay z-[100]"
+      }
+    >
       <header className="app-overlay-header">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={onClose} className="gap-2 text-muted-foreground hover:text-foreground">
-            <ChevronLeft className="w-4 h-4" /> Back
-          </Button>
-          <div className="hidden h-8 w-px bg-border/50 sm:block" />
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary sm:flex">
-              <Mic className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-sm font-semibold tracking-tight sm:text-lg">Call Analysis</h1>
-              <p className="hidden text-xs text-muted-foreground sm:block">Upload audio, get AI summary and next actions</p>
-            </div>
+        <Button variant="ghost" size="sm" onClick={onClose} className="h-8 gap-1 text-muted-foreground">
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </Button>
+        <div className="h-5 w-px bg-border" />
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Mic className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold tracking-tight">Call analysis</h1>
+            <p className="text-[11px] tabular-nums text-muted-foreground">
+              {reports.length} report{reports.length !== 1 ? "s" : ""}
+            </p>
           </div>
         </div>
       </header>
 
       <div className="app-split">
-        <aside className="app-split-side max-h-[46dvh] lg:max-h-none">
-          <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-violet-500" /> New analysis
+        <aside className="chat-scroll app-split-side max-h-[46dvh] space-y-3 lg:max-h-none">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            New analysis
           </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-1.5">Title (optional)</label>
+
+          <div className="card-soft space-y-3 p-4">
+            <div className="space-y-1">
+              <label className={fieldLabel}>Title</label>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Sales call with John"
-                className="rounded-xl bg-background"
+                className="h-9"
               />
             </div>
-            <Tabs value={inputMode} onValueChange={(v) => setInputMode(v as "upload" | "url")} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 rounded-xl bg-muted/50">
-                <TabsTrigger value="upload" className="rounded-lg gap-2">
-                  <Upload className="w-3.5 h-3.5" /> Upload
+
+            <Tabs value={inputMode} onValueChange={(v) => setInputMode(v as "upload" | "url")}>
+              <TabsList className="grid grid-cols-2">
+                <TabsTrigger value="upload">
+                  <Upload />
+                  File
                 </TabsTrigger>
-                <TabsTrigger value="url" className="rounded-lg gap-2">
-                  <Link2 className="w-3.5 h-3.5" /> URL
+                <TabsTrigger value="url">
+                  <Link2 />
+                  URL
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="upload" className="mt-3 space-y-2">
-                <label className="text-sm font-medium text-foreground block">Audio file</label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="file"
-                    accept=".wav,audio/*,.mp3,.m4a,.ogg,.flac,.aac,.opus"
-                    onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-                    className="rounded-xl bg-background file:mr-2 file:rounded-lg file:border-0 file:bg-violet-500/10 file:px-3 file:py-1.5 file:text-sm file:text-violet-600"
-                  />
-                  {selectedFile && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedFile(null)}
-                      className="shrink-0 text-muted-foreground"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
+
+              <TabsContent value="upload" className="mt-2 space-y-2">
+                <label
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    takeFile(e.dataTransfer.files?.[0]);
+                  }}
+                  className={cn(
+                    "flex min-h-[5.5rem] cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-3 py-4 text-center transition-colors",
+                    dragOver ? "border-primary bg-primary/5" : "bg-muted/30 hover:bg-muted/50",
                   )}
-                </div>
-                {selectedFile && (
-                  <p className="text-xs text-muted-foreground truncate">{selectedFile.name}</p>
-                )}
+                >
+                  {selectedFile ? (
+                    <>
+                      <FileText className="mb-1 h-4 w-4 text-primary" />
+                      <p className="max-w-full truncate text-xs font-medium">{selectedFile.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{formatBytes(selectedFile.size)}</p>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mb-1 h-4 w-4 text-muted-foreground" />
+                      <p className="text-xs font-medium">Drop audio or click to browse</p>
+                      <p className="text-[11px] text-muted-foreground">WAV, MP3, M4A · max 100MB</p>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept={AUDIO_ACCEPT}
+                    onChange={(e) => {
+                      takeFile(e.target.files?.[0] ?? null);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {selectedFile ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[11px] text-muted-foreground"
+                    onClick={() => setSelectedFile(null)}
+                  >
+                    <X className="h-3 w-3" />
+                    Remove file
+                  </Button>
+                ) : null}
               </TabsContent>
-              <TabsContent value="url" className="mt-3 space-y-2">
-                <label className="text-sm font-medium text-foreground block">Audio URL</label>
+
+              <TabsContent value="url" className="mt-2 space-y-1">
+                <label className={fieldLabel}>Audio URL</label>
                 <Input
                   value={audioUrl}
                   onChange={(e) => setAudioUrl(e.target.value)}
                   placeholder="https://example.com/recording.mp3"
-                  className="rounded-xl bg-background"
+                  className="h-9"
                 />
               </TabsContent>
             </Tabs>
+
             <Button
               onClick={() => analyzeMutation.mutate()}
-              disabled={
-                analyzeMutation.isPending ||
-                (inputMode === "upload" ? !selectedFile : !audioUrl.trim())
-              }
-              className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white"
+              disabled={analyzeMutation.isPending || !canAnalyze}
+              className="h-9 w-full"
             >
               {analyzeMutation.isPending ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Transcribing & analyzing…
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Transcribing…
                 </>
               ) : (
                 <>
-                  <Upload className="w-4 h-4 mr-2" />
+                  <Sparkles className="h-3.5 w-3.5" />
                   Analyze with AI
                 </>
               )}
             </Button>
           </div>
-          <div className="mt-6 p-4 bg-muted/50 rounded-xl border border-border/50">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Upload a call recording (WAV, MP3, M4A, etc.). AI will transcribe it, then summarize, detect sentiment, extract key points, and suggest next actions.
-              </p>
-            </div>
-          </div>
+
+          <p className="flex items-start gap-1.5 rounded-lg border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
+            AI transcribes the recording, then returns a summary, sentiment, key points, and a next action.
+          </p>
         </aside>
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="border-b border-border/50 p-3 sm:p-4">
-            <h3 className="text-sm font-semibold text-foreground">Reports</h3>
-            <p className="text-xs text-muted-foreground">{reports.length} report{reports.length !== 1 ? "s" : ""}</p>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-            <div className="max-h-[35dvh] w-full shrink-0 overflow-y-auto border-b border-border/50 md:max-h-none md:w-64 md:border-b-0 md:border-r lg:w-72">
-              {isLoading ? (
-                <div className="p-6 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-              ) : isError && reportsError ? (
-                <div className="p-6 text-center text-sm text-destructive">
-                  <p className="font-medium">Failed to load reports</p>
-                  <p className="mt-1 text-muted-foreground">{reportsError.message}</p>
-                </div>
-              ) : reports.length === 0 ? (
-                <div className="p-6 text-center text-sm text-muted-foreground">No reports yet. Upload an audio file and click Analyze.</div>
-              ) : (
-                <ul className="p-2 space-y-1">
-                  {reports.map((r) => (
-                    <li key={r.id} className="flex items-stretch gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedReportId(r.id)}
-                        className={cn(
-                          "flex-1 min-w-0 text-left p-3 rounded-xl transition-colors",
-                          selectedReportId === r.id
-                            ? "bg-violet-500/15 border border-violet-500/30 text-foreground"
-                            : "hover:bg-muted/50 border border-transparent"
-                        )}
-                      >
-                        <p className="text-sm font-medium truncate">{r.title || "Call"}</p>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">{r.summary || "—"}</p>
-                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                        </p>
-                      </button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 h-auto rounded-lg text-muted-foreground hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          requestDeleteReport(r.id);
-                        }}
-                        disabled={deleteMutation.isPending}
-                        aria-label="Delete report"
-                      >
-                        {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+        <section className="flex max-h-[38dvh] min-h-0 w-full shrink-0 flex-col border-b bg-card lg:max-h-none lg:w-[min(100%,20rem)] lg:border-b-0 lg:border-r">
+          <div className="shrink-0 space-y-2 border-b p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold tracking-tight">Reports</h3>
+              <span className="text-[11px] tabular-nums text-muted-foreground">{filteredReports.length}</span>
             </div>
-            <div className="min-w-0 flex-1 overflow-y-auto p-3 sm:p-6">
-              {selectedReportId == null ? (
-                <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                  Select a report or upload a new audio file
-                </div>
-              ) : detailLoading ? (
-                <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
-              ) : reportDetail ? (
-                <div className="max-w-2xl space-y-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h2 className="text-xl font-semibold text-foreground">{reportDetail.title || "Call"}</h2>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {reportDetail.created_at
-                          ? new Date(reportDetail.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
-                          : "—"}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => requestDeleteReport(reportDetail.id)}
-                      aria-label="Delete report"
-                    >
-                      {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    </Button>
-                  </div>
-                  {reportDetail.summary && (
-                    <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
-                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
-                        <CheckCircle2 className="w-4 h-4 text-violet-500" /> Summary
-                      </h3>
-                      <div className="text-sm text-foreground leading-relaxed">
-                        {reportDetail.summary.includes("\n") || reportDetail.summary.includes("•") || reportDetail.summary.includes("-") ? (
-                          <ul className="space-y-1.5 list-none">
-                            {reportDetail.summary
-                              .split(/\n+/)
-                              .filter(line => line.trim())
-                              .map((line, i) => {
-                                const trimmed = line.trim();
-                                // Handle bullet points that already have • or - or *
-                                const bulletMatch = trimmed.match(/^[•\-\*]\s*(.+)$/);
-                                const content = bulletMatch ? bulletMatch[1] : trimmed;
-                                return (
-                                  <li key={i} className="flex items-start gap-2">
-                                    <span className="text-violet-500 mt-0.5">•</span>
-                                    <span className="flex-1">{content}</span>
-                                  </li>
-                                );
-                              })}
-                          </ul>
-                        ) : (
-                          <p>{reportDetail.summary}</p>
-                        )}
-                      </div>
-                    </div>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Filter reports"
+                className="h-8 pl-8"
+              />
+            </div>
+          </div>
+
+          <div className="chat-scroll min-h-0 flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-16">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <p className="text-[11px] text-muted-foreground">Loading reports</p>
+              </div>
+            ) : isError ? (
+              <div className="px-4 py-10 text-center">
+                <p className="text-xs font-medium text-destructive">Could not load reports</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{reportsError?.message}</p>
+              </div>
+            ) : filteredReports.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-1 px-4 py-16 text-center">
+                <Mic className="mb-1 h-4 w-4 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">
+                  {reports.length === 0 ? "No reports yet. Upload a recording to start." : "No reports match that search"}
+                </p>
+              </div>
+            ) : (
+              filteredReports.map((r: CallReportSummary) => (
+                <div
+                  key={r.id}
+                  className={cn(
+                    "group flex items-start gap-1 border-b border-border/60 last:border-0",
+                    selectedReportId === r.id && "bg-primary/5",
                   )}
-                  <div className="flex flex-wrap items-center gap-3">
-                    {reportDetail.sentiment && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-muted-foreground">Sentiment:</span>
-                        <span className="px-2 py-1 rounded-lg bg-violet-500/10 text-violet-700 dark:text-violet-300 text-sm font-medium">
-                          {reportDetail.sentiment}
-                        </span>
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedReportId(r.id);
+                      setDetailTab("overview");
+                    }}
+                    className="min-w-0 flex-1 px-3 py-2.5 text-left hover:bg-muted/30"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <Mic className="h-3.5 w-3.5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{r.title || "Call"}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          {formatDate(r.created_at)}
+                        </p>
                       </div>
-                    )}
-                    {(reportDetail.score !== undefined && reportDetail.score !== null && reportDetail.score !== "") && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-muted-foreground">Score:</span>
-                        <span className="px-2 py-1 rounded-lg bg-muted text-foreground text-sm font-medium">
-                          {String(reportDetail.score)}/10
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  {reportDetail.key_points && (
-                    <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
-                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
-                        <ListChecks className="w-4 h-4 text-violet-500" /> Key points
+                    </div>
+                    {r.summary ? (
+                      <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{r.summary}</p>
+                    ) : null}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {r.sentiment ? <StatusPill label={r.sentiment} tone={sentimentTone(r.sentiment)} /> : null}
+                      {r.score != null && r.score !== "" ? (
+                        <span className="text-[10px] tabular-nums text-muted-foreground">{String(r.score)}/10</span>
+                      ) : null}
+                    </div>
+                  </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="mt-2 mr-1 h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => requestDeleteReport(r.id)}
+                    disabled={deleteMutation.isPending}
+                    title="Delete report"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <main className="chat-scroll min-h-0 min-w-0 flex-1 overflow-y-auto p-3 sm:p-4">
+          {selectedReportId == null ? (
+            <div className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-1 text-center">
+              <FileText className="mb-1 h-4 w-4 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">Select a report or analyze a new recording</p>
+            </div>
+          ) : detailLoading ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-16">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <p className="text-[11px] text-muted-foreground">Loading report</p>
+            </div>
+          ) : reportDetail ? (
+            <div className="mx-auto max-w-2xl space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold tracking-tight">{reportDetail.title || "Call"}</h2>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{formatDate(reportDetail.created_at, true)}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => requestDeleteReport(reportDetail.id)}
+                  title="Delete report"
+                >
+                  {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {reportDetail.sentiment ? (
+                  <StatusPill label={reportDetail.sentiment} tone={sentimentTone(reportDetail.sentiment)} />
+                ) : null}
+                {reportDetail.score != null && reportDetail.score !== "" ? (
+                  <span className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                    Score {String(reportDetail.score)}/10
+                  </span>
+                ) : null}
+              </div>
+
+              <Tabs value={detailTab} onValueChange={setDetailTab}>
+                <TabsList className="w-fit">
+                  <TabsTrigger value="overview">
+                    <CheckCircle2 />
+                    Overview
+                  </TabsTrigger>
+                  <TabsTrigger value="transcript">
+                    <FileText />
+                    Transcript
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="overview" className="space-y-3">
+                  {reportDetail.summary ? (
+                    <div className="card-soft p-4">
+                      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        Summary
                       </h3>
-                      <ul className="text-sm text-foreground leading-relaxed space-y-1 list-disc list-inside">
-                        {(reportDetail.key_points.split("\n").filter(Boolean).length
-                          ? reportDetail.key_points.split("\n").filter(Boolean)
-                          : [reportDetail.key_points]
-                        ).map((line, i) => (
-                          <li key={i}>{line.trim()}</li>
+                      {bulletLines(reportDetail.summary).length > 1 ? (
+                        <ul className="space-y-1.5 text-sm leading-relaxed">
+                          {bulletLines(reportDetail.summary).map((line, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary" />
+                              <span>{line}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm leading-relaxed">{reportDetail.summary}</p>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {reportDetail.key_points ? (
+                    <div className="card-soft p-4">
+                      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+                        <ListChecks className="h-3.5 w-3.5 text-primary" />
+                        Key points
+                      </h3>
+                      <ul className="space-y-1.5 text-sm leading-relaxed">
+                        {bulletLines(reportDetail.key_points).map((line, i) => (
+                          <li key={i} className="flex gap-2">
+                            <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary" />
+                            <span>{line}</span>
+                          </li>
                         ))}
                       </ul>
                     </div>
-                  )}
-                  {reportDetail.next_action && (
-                    <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/20">
-                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
-                        <ArrowRight className="w-4 h-4 text-violet-500" /> Next action
+                  ) : null}
+
+                  {reportDetail.next_action ? (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                      <h3 className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+                        <ArrowRight className="h-3.5 w-3.5 text-primary" />
+                        Next action
                       </h3>
-                      <p className="text-sm text-foreground leading-relaxed">{reportDetail.next_action}</p>
+                      <p className="text-sm leading-relaxed">{reportDetail.next_action}</p>
                     </div>
-                  )}
-                  <div className="p-4 rounded-xl bg-muted/20 border border-border/50">
-                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
-                      <FileText className="w-4 h-4 text-muted-foreground" /> Transcript
+                  ) : null}
+                </TabsContent>
+
+                <TabsContent value="transcript">
+                  <div className="card-soft p-4">
+                    <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                      Transcript
                     </h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
-                      {reportDetail.transcript}
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                      {reportDetail.transcript || "No transcript stored for this report."}
                     </p>
                   </div>
-                </div>
-              ) : null}
+                </TabsContent>
+              </Tabs>
             </div>
-          </div>
+          ) : null}
         </main>
       </div>
     </div>
